@@ -7,5 +7,6 @@ authors = ["Dmitry Kashitsyn <korvin@deeptown.org>"]
 dft = "0.5.3"
 bit-vec = "0.4.3"
 byteorder = { version = "0.5", default-features = true }
-num-traits = "*"
-num-complex = "*"
+num-traits = "0.1.36"
+num-complex = "0.1.35"
+clap = "2.19.3"

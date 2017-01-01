@@ -1,10 +1,12 @@
-#![feature(iter_max_by)]
 
 extern crate num_traits;
 extern crate num_complex;
 extern crate bit_vec;
 extern crate byteorder;
 extern crate dft;
+extern crate clap;
+
+use clap::{Arg, App, SubCommand};
 
 use std::fs::File;
 use std::cmp::Ordering;
@@ -17,9 +19,22 @@ mod sound;
 use sound::*;
 
 fn main() {
-    let mut file = File::open("input.pcm").unwrap();
-    let mut data = Vec::new();
+    let options = App::new("Semantic sound processor")
+        .version("0.1")
+        .author("Dmitriy Kashitsyn <korvin@deeptown.org>")
+        .about("Semantic sound processor based on Alex Redozubov's pattern wave theory")
+        .arg(Arg::with_name("input")
+            .short("i")
+            .long("input")
+            .help("Sets the input file to use")
+            .required(true)
+            .takes_value(true))
+        .get_matches();
 
+    let input_filename = options.value_of("input").unwrap();
+    let mut file = File::open(input_filename).unwrap();
+
+    let mut data = Vec::new();
     while let Ok(input) = file.read_i16::<LittleEndian>() {
         data.push(sound::Cplx::new(input as f64, 0.0));
     }
