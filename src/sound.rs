@@ -1,7 +1,7 @@
 
 
 use num_complex::Complex;
-// use num_traits::Float; //*, FloatConst, One*/};
+use num_traits::Float; //*, FloatConst, One*/};
 pub use bit_vec::BitVec;
 
 const AMPLITUDE_DISPERSION: f64 = 2000.0 * 1.0;
@@ -47,6 +47,17 @@ fn freq(index: usize) -> f64 {
     (index as f64) * (SAMPLE_RATE as f64) / (NUM_POINTS as f64)
 }
 
+// TODO Rewrite using https://crates.io/crates/float-cmp
+fn float_cmp<F: Float>(x: F, y: F, epsilon: F) -> Ordering {
+    if (x - y).abs() < epsilon { return Ordering::Equal; }
+
+    if x < y {
+        Ordering::Less
+    } else {
+        Ordering::Greater
+    }
+}
+
 pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> BitVec {
     // This will hold resulting bit vector of the detectors activity mask
     let mut result = BitVec::new();
@@ -77,18 +88,8 @@ pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> Bit
             .iter()
             .enumerate()
             .map(|(i, c)| (i, c.norm()))
-            .max_by(|&(_, x), &(_, y)| {
-                if (x - y).abs() < 0.00001 { return Ordering::Equal; }
-
-                if x < y {
-                    Ordering::Less
-                } else {
-                    Ordering::Greater
-                }
-            })
+            .max_by(|&(_, x), &(_, y)| float_cmp(x, y, 0.00001))
             .unwrap();
-
-//         let amplitude = amplitude / NUM_POINTS as f64;
 
         // Treating detector as active if max amplitude lays within detector's selectivity range
         let detector_amplitude = detector.amplitude as f64;
