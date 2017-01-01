@@ -1,0 +1,11 @@
+[package]
+name = "fourier"
+version = "0.1.0"
+authors = ["Dmitry Kashitsyn <korvin@deeptown.org>"]
+
+[dependencies]
+dft = "0.5.3"
+bit-vec = "0.4.3"
+byteorder = { version = "0.5", default-features = true }
+num-traits = "*"
+num-complex = "*"
