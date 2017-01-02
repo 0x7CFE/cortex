@@ -28,27 +28,30 @@ fn main() {
     let input_filename = options.value_of("input").unwrap();
     let mut detectors = Vec::new();
 
-    detectors.push(Detector::new(990.0, 50.0, 8000.0));
+//     detectors.push(Detector::new(990.0, 50.0, -5.0));
+//     detectors.push(Detector::new(990.0, 50.0, -15.0));
+//     detectors.push(Detector::new(990.0, 50.0, -25.0));
+//     detectors.push(Detector::new(990.0, 50.0, -35.0));
 
     // Populating detectors from 0Hz to ~1KHz with 100Hz selectivity (±50 Hz)
-    /*for i in 1 .. 12 {
+    for i in 1 .. 12 {
         let freq = BASE_FREQUENCY * 2.0 * i as f32;
 
-        detectors.push(Detector::new(freq, 50.0, 8000.0));
-        detectors.push(Detector::new(freq, 50.0, 16000.0));
-        detectors.push(Detector::new(freq, 50.0, 12000.0));
-        detectors.push(Detector::new(freq, 50.0, 20000.0));
+        detectors.push(Detector::new(freq, 50.0, -5.0));
+        detectors.push(Detector::new(freq, 50.0, -15.0));
+        detectors.push(Detector::new(freq, 50.0, -25.0));
+        detectors.push(Detector::new(freq, 50.0, -35.0));
     }
 
     // Populating detectors from ~1Hz to 3KHz with 500Hz selectivity
     for i in 0 .. 10 {
         let freq = 990.0 + 4.0 * BASE_FREQUENCY * i as f32;
 
-        detectors.push(Detector::new(freq, 500.0, 8000.0));
-        detectors.push(Detector::new(freq, 500.0, 16000.0));
-        detectors.push(Detector::new(freq, 500.0, 12000.0));
-        detectors.push(Detector::new(freq, 500.0, 20000.0));
-    }*/
+        detectors.push(Detector::new(freq, 500.0, -5.0));
+        detectors.push(Detector::new(freq, 500.0, -15.0));
+        detectors.push(Detector::new(freq, 500.0, -25.0));
+        detectors.push(Detector::new(freq, 500.0, -35.0));
+    }
 
     let mask = analyze_file(input_filename, &detectors);
     //let mask = sound::filter_detectors(result, &detectors);

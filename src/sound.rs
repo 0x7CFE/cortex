@@ -11,7 +11,7 @@ pub use bit_vec::BitVec;
 use hound;
 
 // TODO Move to the Detector as individual field
-const AMPLITUDE_DISPERSION: f32 = 2000.0 * 1.0;
+const AMPLITUDE_DISPERSION_DB: f32 = 10.0;
 
 pub type Cplx = Complex<f32>;
 
@@ -114,7 +114,7 @@ pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector]
             .unwrap();
 
         // Treating detector as active if max amplitude lays within detector's selectivity range
-        let is_active = (amplitude.abs() - detector.amp).abs() < AMPLITUDE_DISPERSION;
+        let is_active = (decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DISPERSION_DB;
 
         println!("signal frequency {}, amplitude {} → {} dB {}\n",
             freq(lo+index),
@@ -136,8 +136,6 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
 
     // Reading file by chunks of NUM_POINTS, then processing
     for i in 0 .. {
-        println!("Chunk {}", i);
-
         let mut samples: Samples = reader
             .samples::<i16>()
             .take(NUM_POINTS)
@@ -147,6 +145,8 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
         if samples.len() < NUM_POINTS {
             break;
         }
+
+        println!("*** Chunk {}", i);
 
         let plan = Plan::new(Operation::Forward, NUM_POINTS);
         dft::transform(&mut samples, &plan);
