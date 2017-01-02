@@ -4,47 +4,47 @@ use num_complex::Complex;
 use num_traits::Float; //*, FloatConst, One*/};
 pub use bit_vec::BitVec;
 
-const AMPLITUDE_DISPERSION: f64 = 2000.0 * 1.0;
+const AMPLITUDE_DISPERSION: f32 = 2000.0 * 1.0;
 
-pub type Cplx = Complex<f64>;
+pub type Cplx = Complex<f32>;
 
 use std::cmp::Ordering;
-pub type Spectrum = Vec<Complex<f64>>;
-pub type SpectrumSlice = [Complex<f64>];
+pub type Spectrum = Vec<Complex<f32>>;
+pub type SpectrumSlice = [Complex<f32>];
 
 pub const SAMPLE_RATE:     usize = 44100;
 pub const NUM_POINTS:      usize = 1024;
-pub const BASE_FREQUENCY:  usize = SAMPLE_RATE / NUM_POINTS;
+pub const BASE_FREQUENCY:  f32 = SAMPLE_RATE as f32 / NUM_POINTS as f32;
 
-#[derive(Copy, Clone, Hash, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct Detector {
-    frequency: i16,
-    dispersion: i16,
-    amplitude: i16,
+    freq: f32,
+    band: f32,
+    amp:  f32,
 //     phase: i16,
 }
 
 impl Detector {
-    pub fn new(freq: i16, disp: i16, amp: i16/*, phase: i16*/) -> Detector {
+    pub fn new(freq: f32, band: f32, amp: f32/*, phase: i16*/) -> Detector {
         Detector {
-            frequency: freq,
-            dispersion: disp,
-            amplitude: amp,
+            freq: freq,
+            band: band,
+            amp: amp,
 //             phase: phase
         }
     }
 
     /*pub fn match_freq(&self, freq: i16) -> bool {
-        (self.frequency - freq).abs() < self.dispersion
+        (self.freq - freq).abs() < self.band
     }
 
     pub fn match_amp(&self, amp: i16) -> bool {
-        (self.amplitude - amp).abs() < 4096
+        (self.amp - amp).abs() < 4096
     }*/
 }
 
-fn freq(index: usize) -> f64 {
-    (index as f64) * (SAMPLE_RATE as f64) / (NUM_POINTS as f64)
+fn freq(index: usize) -> f32 {
+    (index as f32) * (SAMPLE_RATE as f32) / (NUM_POINTS as f32)
 }
 
 // TODO Rewrite using https://crates.io/crates/float-cmp
@@ -62,7 +62,7 @@ pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> Bit
     // This will hold resulting bit vector of the detectors activity mask
     let mut result = BitVec::new();
 
-    println!("base frequency is {}, amplitude response {}, spectrum len {}\n",
+    println!("base frequency is {}, amp response {}, spectrum len {}\n",
         BASE_FREQUENCY,
         AMPLITUDE_DISPERSION,
         spectrum.len());
@@ -71,14 +71,25 @@ pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> Bit
     for detector in detectors {
         // Each detector operates only in the fixed part of the spectrum
         // Selecting potentially interesting spectrum slice to check
-        let lo = ((detector.frequency - detector.dispersion) / BASE_FREQUENCY as i16) as usize;
-        let hi = ((detector.frequency + detector.dispersion) / BASE_FREQUENCY as i16) as usize;
-        let range = &spectrum[lo .. hi + 1];
+        let lo = ((detector.freq - detector.band) / BASE_FREQUENCY).round() as usize;
+        let hi = ((detector.freq + detector.band) / BASE_FREQUENCY).round() as usize;
+
+        if lo > spectrum.len() - 1 || hi > spectrum.len() - 1 {
+            println!("invalid detector freq {}, band {}", detector.freq, detector.band);
+            break;
+        }
+
+        let range =
+            if hi + 1 < spectrum.len() {
+                &spectrum[lo .. hi + 1]
+            } else {
+                &spectrum[lo .. spectrum.len() - 1]
+            };
 
         println!("detector freq {}±{}, amp {}, selected freq range is {} .. {}",
-            detector.frequency,
-            detector.dispersion,
-            detector.amplitude,
+            detector.freq,
+            detector.band,
+            detector.amp,
             freq(lo),
             freq(hi)
         );
@@ -92,7 +103,7 @@ pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> Bit
             .unwrap();
 
         // Treating detector as active if max amplitude lays within detector's selectivity range
-        let detector_amplitude = detector.amplitude as f64;
+        let detector_amplitude = detector.amp as f32;
         let is_active = (amplitude.abs() - detector_amplitude).abs() < AMPLITUDE_DISPERSION;
 
         println!("signal frequency {}, amplitude {}{}\n",

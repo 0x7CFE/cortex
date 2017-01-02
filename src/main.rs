@@ -36,7 +36,7 @@ fn main() {
 
     let mut data = Vec::new();
     while let Ok(input) = file.read_i16::<LittleEndian>() {
-        data.push(sound::Cplx::new(input as f64, 0.0));
+        data.push(sound::Cplx::new(input as f32, 0.0));
     }
 
     // Filling the remaining part of the window with zeroes
@@ -68,18 +68,35 @@ fn main() {
 
         let mut detectors = Vec::new();
 
-        // Populating detectors from 100Hz to 2KHz with 100Hz selectivity
-        for freq in 1 .. 20 {
-            detectors.push(Detector::new(freq * 100, 50, 8000));
-            detectors.push(Detector::new(freq * 100, 50, 12000));
-            detectors.push(Detector::new(freq * 100, 50, 16000));
-            detectors.push(Detector::new(freq * 100, 50, 20000));
+//         for freq in 1 .. 20 {
+//             detectors.push(Detector::new(freq as f32 * 100.0, 50.0, 8000.0));
+//             detectors.push(Detector::new(freq as f32 * 100.0, 50.0, 12000.0));
+//             detectors.push(Detector::new(freq as f32 * 100.0, 50.0, 16000.0));
+//             detectors.push(Detector::new(freq as f32 * 100.0 , 50.0, 20000.0));
+//         }
 
-//             detectors.push(Detector::new(freq * 150, 50, 0000));
-//             detectors.push(Detector::new(freq * 150, 50, 4000));
-//             detectors.push(Detector::new(freq * 150, 50, 8000));
-//             detectors.push(Detector::new(freq * 150, 50, 16000));
+        // Populating detectors from 0Hz to ~1KHz with 100Hz selectivity (±50 Hz)
+        for i in 1 .. 12 {
+            let freq = BASE_FREQUENCY * 2.0 * i as f32;
+
+            detectors.push(Detector::new(freq, 50.0, 8000.0));
+            detectors.push(Detector::new(freq, 50.0, 16000.0));
+            detectors.push(Detector::new(freq, 50.0, 12000.0));
+            detectors.push(Detector::new(freq, 50.0, 20000.0));
         }
+
+        // Populating detectors from ~1Hz to 3KHz with 500Hz selectivity
+        for i in 0 .. 10 {
+//             let freq = 990.0 + BASE_FREQUENCY * i as f32;
+//             let band = 24.7 * (4.37 * freq as f32 + 1.0);
+            let freq = 990.0 + 4.0 * BASE_FREQUENCY * i as f32;
+
+            detectors.push(Detector::new(freq, 500.0, 8000.0));
+            detectors.push(Detector::new(freq, 500.0, 16000.0));
+            detectors.push(Detector::new(freq, 500.0, 12000.0));
+            detectors.push(Detector::new(freq, 500.0, 20000.0));
+        }
+
 /*
         let detectors = vec![
             Detector::new(387, 50, 19000),
