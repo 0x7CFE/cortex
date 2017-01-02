@@ -1,7 +1,7 @@
 
 
 use num_complex::Complex;
-use num_traits::Float;
+use num_traits::{Num, Float};
 
 use dft;
 use dft::{Operation, Plan};
@@ -38,6 +38,7 @@ impl Detector {
             freq: freq,
             band: band,
             amp: amp,
+
 //             phase: phase
         }
     }
@@ -67,11 +68,15 @@ pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> Bit
     result
 }
 
+fn decibel(input: f32) -> f32 {
+    20.0 * input.log10()
+}
+
 pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector], result: &mut BitVec) {
-    println!("base frequency is {}, amp response {}, spectrum len {}\n",
-        BASE_FREQUENCY,
-        AMPLITUDE_DISPERSION,
-        spectrum.len());
+//     println!("base frequency is {}, amp response {}, spectrum len {}\n",
+//         BASE_FREQUENCY,
+//         AMPLITUDE_DISPERSION,
+//         spectrum.len());
 
     // Iterating through all detectors filtering out activity
     for detector in detectors {
@@ -104,18 +109,17 @@ pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector]
         let (index, amplitude) = range
             .iter()
             .enumerate()
-            .map(|(i, c)| (i, c.norm()))
+            .map(|(i, c)| (i, c.norm() * 2.0 / NUM_POINTS as f32))
             .max_by(|&(_, x), &(_, y)| float_cmp(x, y, 0.00001))
             .unwrap();
 
         // Treating detector as active if max amplitude lays within detector's selectivity range
-        let detector_amplitude = detector.amp as f32;
-        let is_active = (amplitude.abs() - detector_amplitude).abs() < AMPLITUDE_DISPERSION;
+        let is_active = (amplitude.abs() - detector.amp).abs() < AMPLITUDE_DISPERSION;
 
-        println!("signal frequency {}, amplitude {} → {}{}\n",
+        println!("signal frequency {}, amplitude {} → {} dB {}\n",
             freq(lo+index),
             amplitude,
-            amplitude / NUM_POINTS as f32,
+            decibel(amplitude),
             if is_active { ", **MATCH**" } else { "" }
         );
 
@@ -137,7 +141,7 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
         let mut samples: Samples = reader
             .samples::<i16>()
             .take(NUM_POINTS)
-            .map(|s| Cplx::new(s.unwrap() as f32, 0.0))
+            .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
             .collect();
 
         if samples.len() < NUM_POINTS {
@@ -147,7 +151,7 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
         let plan = Plan::new(Operation::Forward, NUM_POINTS);
         dft::transform(&mut samples, &plan);
 
-        filter_detectors_inplace(&samples, detectors, &mut result);
+        filter_detectors_inplace(&samples[..NUM_POINTS/2 - 1], detectors, &mut result);
     }
 
     result

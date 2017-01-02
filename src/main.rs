@@ -2,7 +2,7 @@
 extern crate num_traits;
 extern crate num_complex;
 extern crate bit_vec;
-extern crate byteorder;
+// extern crate byteorder;
 extern crate dft;
 extern crate clap;
 extern crate hound;
@@ -28,8 +28,10 @@ fn main() {
     let input_filename = options.value_of("input").unwrap();
     let mut detectors = Vec::new();
 
+    detectors.push(Detector::new(990.0, 50.0, 8000.0));
+
     // Populating detectors from 0Hz to ~1KHz with 100Hz selectivity (±50 Hz)
-    for i in 1 .. 12 {
+    /*for i in 1 .. 12 {
         let freq = BASE_FREQUENCY * 2.0 * i as f32;
 
         detectors.push(Detector::new(freq, 50.0, 8000.0));
@@ -46,11 +48,11 @@ fn main() {
         detectors.push(Detector::new(freq, 500.0, 16000.0));
         detectors.push(Detector::new(freq, 500.0, 12000.0));
         detectors.push(Detector::new(freq, 500.0, 20000.0));
-    }
+    }*/
 
     let mask = analyze_file(input_filename, &detectors);
     //let mask = sound::filter_detectors(result, &detectors);
-    println!("detector activity mask is {:?}", mask);
+    println!("{} detectors, mask size {} : {:?}", detectors.len(), mask.len(), mask);
 
     /*let plan = Plan::new(Operation::Backward, NUM_POINTS);
     dft::transform(&mut data[..NUM_POINTS], &plan);
