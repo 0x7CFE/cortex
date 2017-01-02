@@ -1,16 +1,24 @@
 
 
 use num_complex::Complex;
-use num_traits::Float; //*, FloatConst, One*/};
+use num_traits::Float;
+
+use dft;
+use dft::{Operation, Plan};
+
 pub use bit_vec::BitVec;
 
+use hound;
+
+// TODO Move to the Detector as individual field
 const AMPLITUDE_DISPERSION: f32 = 2000.0 * 1.0;
 
 pub type Cplx = Complex<f32>;
 
 use std::cmp::Ordering;
-pub type Spectrum = Vec<Complex<f32>>;
-pub type SpectrumSlice = [Complex<f32>];
+pub type Samples  = Vec<Cplx>;
+pub type Spectrum = Vec<Cplx>;
+pub type SpectrumSlice = [Cplx];
 
 pub const SAMPLE_RATE:     usize = 44100;
 pub const NUM_POINTS:      usize = 1024;
@@ -18,9 +26,9 @@ pub const BASE_FREQUENCY:  f32 = SAMPLE_RATE as f32 / NUM_POINTS as f32;
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Detector {
-    freq: f32,
-    band: f32,
-    amp:  f32,
+    freq: f32, // base detector frequency
+    band: f32, // frequency range
+    amp:  f32, // amplitude
 //     phase: i16,
 }
 
@@ -33,14 +41,6 @@ impl Detector {
 //             phase: phase
         }
     }
-
-    /*pub fn match_freq(&self, freq: i16) -> bool {
-        (self.freq - freq).abs() < self.band
-    }
-
-    pub fn match_amp(&self, amp: i16) -> bool {
-        (self.amp - amp).abs() < 4096
-    }*/
 }
 
 fn freq(index: usize) -> f32 {
@@ -62,6 +62,12 @@ pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> Bit
     // This will hold resulting bit vector of the detectors activity mask
     let mut result = BitVec::new();
 
+    filter_detectors_inplace(spectrum, detectors, &mut result);
+
+    result
+}
+
+pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector], result: &mut BitVec) {
     println!("base frequency is {}, amp response {}, spectrum len {}\n",
         BASE_FREQUENCY,
         AMPLITUDE_DISPERSION,
@@ -106,15 +112,43 @@ pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> Bit
         let detector_amplitude = detector.amp as f32;
         let is_active = (amplitude.abs() - detector_amplitude).abs() < AMPLITUDE_DISPERSION;
 
-        println!("signal frequency {}, amplitude {}{}\n",
+        println!("signal frequency {}, amplitude {} → {}{}\n",
             freq(lo+index),
             amplitude,
+            amplitude / NUM_POINTS as f32,
             if is_active { ", **MATCH**" } else { "" }
         );
 
         result.push(is_active);
     }
+}
+
+pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
+    // This will hold resulting bit vector of the detectors activity mask
+    let mut result = BitVec::new();
+
+    // Opening wave file for reading
+    let mut reader = hound::WavReader::open(filename).unwrap();
+
+    // Reading file by chunks of NUM_POINTS, then processing
+    for i in 0 .. {
+        println!("Chunk {}", i);
+
+        let mut samples: Samples = reader
+            .samples::<i16>()
+            .take(NUM_POINTS)
+            .map(|s| Cplx::new(s.unwrap() as f32, 0.0))
+            .collect();
+
+        if samples.len() < NUM_POINTS {
+            break;
+        }
+
+        let plan = Plan::new(Operation::Forward, NUM_POINTS);
+        dft::transform(&mut samples, &plan);
+
+        filter_detectors_inplace(&samples, detectors, &mut result);
+    }
 
     result
 }
-
