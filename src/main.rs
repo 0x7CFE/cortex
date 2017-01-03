@@ -7,7 +7,7 @@ extern crate dft;
 extern crate clap;
 extern crate hound;
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 
 mod sound;
 use sound::*;
@@ -23,6 +23,12 @@ fn main() {
             .help("Sets the input file to use")
             .required(true)
             .takes_value(true))
+        .arg(Arg::with_name("output")
+            .short("o")
+            .long("output")
+            .help("Sets the output file to rewrite")
+            .required(false)
+            .takes_value(true))
         .get_matches();
 
     let input_filename = options.value_of("input").unwrap();
@@ -34,7 +40,7 @@ fn main() {
 //     detectors.push(Detector::new(990.0, 50.0, -35.0));
 
     // Populating detectors from 0Hz to ~1KHz with 100Hz selectivity (±50 Hz)
-    for i in 1 .. 12 {
+    for i in 1 .. 13 {
         let freq = BASE_FREQUENCY * 2.0 * i as f32;
 
         detectors.push(Detector::new(freq, 50.0, -5.0));
@@ -44,8 +50,8 @@ fn main() {
     }
 
     // Populating detectors from ~1Hz to 3KHz with 500Hz selectivity
-    for i in 0 .. 10 {
-        let freq = 990.0 + 4.0 * BASE_FREQUENCY * i as f32;
+    for i in 0 .. 4 {
+        let freq = BASE_FREQUENCY * 24. + 4.0 * BASE_FREQUENCY * i as f32;
 
         detectors.push(Detector::new(freq, 500.0, -5.0));
         detectors.push(Detector::new(freq, 500.0, -15.0));
@@ -53,9 +59,13 @@ fn main() {
         detectors.push(Detector::new(freq, 500.0, -35.0));
     }
 
-    let mask = analyze_file(input_filename, &detectors);
+    let mask = sound::analyze_file(input_filename, &detectors);
     //let mask = sound::filter_detectors(result, &detectors);
     println!("{} detectors, mask size {} : {:?}", detectors.len(), mask.len(), mask);
+
+    if let Some(output_filename) = options.value_of("output") {
+        sound::generate_file(output_filename, &detectors, &mask);
+    }
 
     /*let plan = Plan::new(Operation::Backward, NUM_POINTS);
     dft::transform(&mut data[..NUM_POINTS], &plan);
