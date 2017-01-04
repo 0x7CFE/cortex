@@ -59,15 +59,6 @@ fn float_cmp<F: Float>(x: F, y: F, epsilon: F) -> Ordering {
     }
 }
 
-// pub fn filter_detectors(spectrum: &SpectrumSlice, detectors: &[Detector]) -> BitVec {
-//     // This will hold resulting bit vector of the detectors activity mask
-//     let mut result = BitVec::new();
-//
-//     filter_detectors_inplace(spectrum, detectors, &mut result);
-//
-//     result
-// }
-
 fn decibel(input: f32) -> f32 {
     20.0 * input.log10()
 }
@@ -77,11 +68,6 @@ fn invert_decibel(input: f32) -> f32 {
 }
 
 pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector], result: &mut BitVec) {
-//     println!("base frequency is {}, amp response {}, spectrum len {}\n",
-//         BASE_FREQUENCY,
-//         AMPLITUDE_DISPERSION,
-//         spectrum.len());
-
     // Iterating through all detectors filtering out activity
     for detector in detectors {
         // Each detector operates only in the fixed part of the spectrum
@@ -89,25 +75,12 @@ pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector]
         let lo = ((detector.freq - detector.band).abs() / BASE_FREQUENCY).round() as usize;
         let hi = ((detector.freq + detector.band).abs() / BASE_FREQUENCY).round() as usize;
 
-//         println!("detector freq {}±{}, BASE_FREQUENCY {} range {} .. {}",
-//             detector.freq,
-//             detector.band,
-//             BASE_FREQUENCY,
-//             flo,
-//             fhi
-//         );
-
         if lo > spectrum.len() - 1 || hi > spectrum.len() - 1 {
             println!("invalid detector freq {}, band {}", detector.freq, detector.band);
             break;
         }
 
         let range = &spectrum[lo .. hi + 1];
-            /*if hi + 1 < spectrum.len() {
-                &spectrum[lo .. hi + 1]
-            } else {
-                &spectrum[lo .. spectrum.len() - 1]
-            };*/
 
         println!("detector freq {} ± {}, amp {} ± {} dB, selected freq range is {} .. {}",
             detector.freq,
@@ -146,17 +119,19 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
 
     // Opening wave file for reading
     let mut reader = hound::WavReader::open(filename).unwrap();
+    let mut total_samples = 0;
 
     // Reading file by chunks of NUM_POINTS, normalizing value to [0 .. 1], then processing
     for chunk in 1 .. {
         let mut samples: Samples = reader
             .samples::<i16>()
+            .filter(|_| { total_samples += 1; true })
             .take(NUM_POINTS)
             .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
             .collect();
 
         if samples.len() < NUM_POINTS / 2 {
-            println!("*** End of input, total chunks processed: {}", chunk - 1);
+            println!("*** End of input, samples processed: {}, chunks {}", total_samples, chunk - 1);
             break;
         }
 
@@ -167,6 +142,7 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
         dft::transform(&mut samples, &plan);
 
         filter_detectors_inplace(&samples[..NUM_POINTS/2 - 1], detectors, &mut result);
+        println!("total samples so far {}", total_samples);
     }
 
     result
@@ -183,15 +159,17 @@ pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {
     let mut writer = hound::WavWriter::create(filename, wav_header).unwrap();
     let mut mask_iter = mask.iter();
 
+    let mut total_samples = 0;
+
     for chunk in 1 .. {
         println!("!!! Chunk {}", chunk);
 
-        let mut spectrum: Spectrum = Vec::with_capacity(NUM_POINTS);
+        let mut spectrum: Spectrum = Vec::new();
         spectrum.resize(NUM_POINTS, Cplx::default());
 
         let mut num_taken = 0;
 
-        for (freq, value) in mask_iter
+        for (freq, amp) in mask_iter
             .clone()
             .take(detectors.len())
             .filter(|_| { num_taken += 1; true })
@@ -209,16 +187,17 @@ pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {
                     amplitude);
 
                 // Phase was lost during analysis
-                (frequency, Cplx::new(amplitude, 0.0))
+                (frequency, amplitude)
             })
         {
             let bin = (freq / BASE_FREQUENCY).round() as usize;
 
-            println!("writing freq {} to bin[{}] = bin[{}] = {}\n", freq, bin, NUM_POINTS-bin, value);
+            println!("writing freq {} to bin[{}] = bin[{}] = {}\n", freq, bin, NUM_POINTS-bin, amp);
 
-            // Spectrum has center symmetry
-            spectrum[bin].re = value.re;
-            spectrum[NUM_POINTS - bin].re = value.re;
+            if spectrum[bin].re < amp {
+                spectrum[bin].re = amp;
+                // spectrum[NUM_POINTS - bin].re = amp;
+            }
         }
 
         if num_taken == 0 {
@@ -234,8 +213,14 @@ pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {
         let max_sample = spectrum.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
 
         for sample in spectrum {
+            total_samples += 1;
+
             let amplitude = (i16::max_value() - 100) as f32;
             writer.write_sample((sample.re / max_sample * amplitude) as i16).unwrap();
         }
+
+        println!("total samples so far {}", total_samples);
     }
+
+    println!("total samples written {}", total_samples);
 }

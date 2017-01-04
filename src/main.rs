@@ -9,7 +9,7 @@ extern crate hound;
 use clap::{Arg, App};
 
 mod sound;
-use sound::{Detector, BASE_FREQUENCY};
+use sound::Detector;
 
 fn detector_freq(index: usize) -> f32 {
     15. + 5. * index as f32 + ((index as f32 - 5.) / 16.).exp()
@@ -48,7 +48,7 @@ fn main() {
         detectors.push(Detector::new(freq, band, -25.));
         detectors.push(Detector::new(freq, band, -35.));
 
-        println!("detector[{:3}]\tfreq {:.2},\tband {:.2},\tamp {} dB", i, freq, band, "-5 .. -35");
+        println!("detector[{:3}]\tfreq {:.2},\tband {:.2}", i, freq, band);
     }
 
 //     detectors.push(Detector::new(516.7969, 50.0, -12.0));
@@ -58,26 +58,6 @@ fn main() {
 //    detectors.push(Detector::new(1990.0, 50.0, -15.0));
 //     detectors.push(Detector::new(990.0, 50.0, -25.0));
 //     detectors.push(Detector::new(990.0, 50.0, -35.0));
-
-    // Populating detectors from 0Hz to ~1KHz with 100Hz selectivity (±50 Hz)
-    /*for i in 1 .. 13 {
-        let freq = BASE_FREQUENCY * 2.0 * i as f32;
-
-        detectors.push(Detector::new(freq, 50.0, -5.0));
-        detectors.push(Detector::new(freq, 50.0, -15.0));
-        detectors.push(Detector::new(freq, 50.0, -25.0));
-        detectors.push(Detector::new(freq, 50.0, -35.0));
-    }
-
-    // Populating detectors from ~1Hz to 3KHz with 500Hz selectivity
-    for i in 0 .. 4 {
-        let freq = BASE_FREQUENCY * 26. + 4.0 * BASE_FREQUENCY * i as f32;
-
-        detectors.push(Detector::new(freq, 500.0, -5.0));
-        detectors.push(Detector::new(freq, 500.0, -15.0));
-        detectors.push(Detector::new(freq, 500.0, -25.0));
-        detectors.push(Detector::new(freq, 500.0, -35.0));
-    }*/
 
     let mask = sound::analyze_file(input_filename, &detectors);
     println!("{} detectors, mask size {}", detectors.len(), mask.len());
@@ -100,18 +80,4 @@ fn main() {
     if let Some(output_filename) = options.value_of("output") {
         sound::generate_file(output_filename, &detectors, &mask);
     }
-
-    /*let plan = Plan::new(Operation::Backward, NUM_POINTS);
-    dft::transform(&mut data[..NUM_POINTS], &plan);
-
-    let mut file = File::create("output.pcm").unwrap();
-
-    for c in data.iter()/*.take(10)*/ {
-        let n = c.re / NUM_POINTS as f64;
-        let v = n.round() as i16;
-
-//         println!("writing c {} -> {} -> {}", c, n, v);
-        file.write_i16::<LittleEndian>(v).unwrap();
-    }*/
-
 }
