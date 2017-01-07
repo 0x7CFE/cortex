@@ -21,24 +21,32 @@ pub type Samples  = Vec<Cplx>;
 pub type Spectrum = Vec<Cplx>;
 pub type SpectrumSlice = [Cplx];
 
-pub const SAMPLE_RATE:     usize = 96000; // 44100;
+pub const SAMPLE_RATE:     usize = 44100;
 pub const NUM_POINTS:      usize = 8192;
 pub const BASE_FREQUENCY:  f32 = (SAMPLE_RATE as f32) / (NUM_POINTS as f32);
+
+fn to_decibel(input: f32) -> f32 {
+    20.0 * input.log10()
+}
+
+fn from_decibel(input: f32) -> f32 {
+    (10 as f32).powf(input / 20.0)
+}
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Detector {
     freq:  f32, // base detector frequency
     band:  f32, // frequency range
-    amp:   f32, // amplitude
+    amp:   f32, // amplitude in dB
     phase: f32, // phase
 }
 
 impl Detector {
     pub fn new(freq: f32, band: f32, amp: f32, phase: f32) -> Detector {
         Detector {
-            freq: freq,
-            band: band,
-            amp: amp,
+            freq:  freq,
+            band:  band,
+            amp:   amp,
             phase: phase,
         }
     }
@@ -59,20 +67,9 @@ fn float_cmp<F: Float>(x: F, y: F, epsilon: F) -> Ordering {
     }
 }
 
-fn decibel(input: f32) -> f32 {
-    20.0 * input.log10()
-}
-
-fn invert_decibel(input: f32) -> f32 {
-    (10 as f32).powf(input / 20.0)
-}
-
 pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector], result: &mut BitVec) {
     // Iterating through all detectors filtering out activity
     for detector in detectors {
-        // Each detector operates only in the fixed part of the spectrum
-        // Selecting potentially interesting spectrum slice to check
-
         let index = (detector.freq / BASE_FREQUENCY).round() as usize;
 
         println!("detector freq {} ± {}, amp {} ± {} dB, phase {}",
@@ -88,18 +85,20 @@ pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector]
         let phase = spectrum[index].arg();
 
         // Treating detector as active if max amplitude lays within detector's selectivity range
-        let amp_match   = (decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
+        let amp_match   = (to_decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
+
+        // + PI is required to compare positive and negative values
         let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < PHASE_DEVIATION_DB;
+
         let is_active   = amp_match && phase_match;
+        result.push(is_active);
 
         println!("signal amplitude {} → {} dB, phase {}{}\n",
             amplitude,
-            decibel(amplitude),
+            to_decibel(amplitude),
             phase,
             if is_active { ", **MATCH**" } else { "" }
         );
-
-        result.push(is_active);
     }
 }
 
@@ -133,19 +132,18 @@ pub fn filter_detectors_inplace2(spectrum: &SpectrumSlice, detectors: &[Detector
             .iter()
             .enumerate()
             .map(|(i, c)| (i, (c.norm() * 2.0) / NUM_POINTS as f32, c.arg()))
-            //.max_by(|&(_, x, _), &(_, y, _)| x.partial_cmp(&y).unwrap_or(Ordering::Less))
             .max_by(|&(_, x, _), &(_, y, _)| float_cmp(x, y, 0.00001))
             .unwrap();
 
         // Treating detector as active if max amplitude lays within detector's selectivity range
-        let amp_match   = (decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
+        let amp_match   = (to_decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
         let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < PHASE_DEVIATION_DB;
         let is_active   = amp_match && phase_match;
 
         println!("signal frequency {}, amplitude {} → {} dB, phase {}{}\n",
             freq(lo+index),
             amplitude,
-            decibel(amplitude),
+            to_decibel(amplitude),
             phase,
             if is_active { ", **MATCH**" } else { "" }
         );
@@ -166,10 +164,11 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
     for chunk in 1 .. {
         let mut samples: Samples = reader
             .samples::<i16>()
-            .filter(|_| { total_samples += 1; true })
             .take(NUM_POINTS)
             .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
             .collect();
+
+        total_samples += samples.len();
 
         if samples.len() < NUM_POINTS / 2 {
             println!("*** End of input, samples processed: {}, chunks {}", total_samples, chunk - 1);
@@ -218,7 +217,7 @@ pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {
             .filter(|&(_, bit)| bit)
             .map(|(index, _)| {
                 let frequency = detectors[index].freq;
-                let amplitude = invert_decibel(detectors[index].amp) / 2.0;// * NUM_POINTS as f32;
+                let amplitude = from_decibel(detectors[index].amp) / 2.0;// * NUM_POINTS as f32;
                 let phase = detectors[index].phase;
 
                 println!("chunk {}, active detector[{}]: freq {}, amplitude {} dB = {}",
