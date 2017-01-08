@@ -164,7 +164,7 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
     for chunk in 1 .. {
         let mut samples: Samples = reader
             .samples::<i16>()
-            .take(NUM_POINTS)
+            .take(NUM_POINTS / 2)
             .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
             .collect();
 

@@ -9,6 +9,7 @@ extern crate hound;
 use clap::{Arg, App};
 
 mod sound;
+mod memory;
 use sound::Detector;
 
 use std::f32::consts::PI;
@@ -73,7 +74,7 @@ fn main() {
             print!("\n        ");
         }
 
-        print!("{}", bit as i8);
+        print!("{}", if bit { "!" } else { "." } );
     }
 
     print!("\n\n");
