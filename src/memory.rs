@@ -21,8 +21,8 @@ struct Fragment {
 }
 
 /// Internal container type used by `Dictionary`
-type FragmentCell = Rc<RefCell<Fragment>>;
-type FragmentMap  = HashMap<FragmentKey, FragmentCell>;
+type RcFragment  = Rc<Fragment>;
+type FragmentMap = HashMap<FragmentKey, RcFragment>;
 
 /// `Dictionary` holds fragments associated with bit vectors.
 struct Dictionary<'a> {
@@ -71,7 +71,7 @@ impl<'a> Dictionary<'a> {
     /// returned. If no match was found, then new item is added.
     fn insert(&mut self, fragment: Fragment) {
         let mut new_key = fragment.key(self.detectors);
-        let mut new_prototype = Rc::new(RefCell::new(fragment));
+        let mut new_prototype = Rc::new(fragment);
 
         loop {
             match self.map.entry(new_key) {
@@ -83,7 +83,7 @@ impl<'a> Dictionary<'a> {
 
                 Entry::Occupied(mut entry) => {
                     let key_differs = {
-                        new_key = Self::merge(&mut entry.get_mut().borrow_mut(), &new_prototype.borrow());
+                        new_key = Self::merge(Rc::get_mut(entry.get_mut()).unwrap(), &new_prototype);
                         *entry.key() != new_key
                     };
 
@@ -100,7 +100,7 @@ impl<'a> Dictionary<'a> {
         }
     }
 
-    fn find(&self, key: &FragmentKey) -> Option<FragmentCell> {
+    fn find(&self, key: &FragmentKey) -> Option<RcFragment> {
         match self.map.get(key) {
             Some(fragment) => Some(fragment.clone()),
             None => None
