@@ -1,20 +1,28 @@
-use sound::{Spectrum, Cplx, Detector};
-use bit_vec::BitVec;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+
+use std::rc::Rc;
+use std::cell::RefCell;
+
+use bit_vec::BitVec;
+
+use sound::{Spectrum, Cplx, Detector};
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct FragmentKey(BitVec);
 
+const FRAGMENT_SLICES: usize = 8;
+
 /// `Fragment` represents several time slices
 /// of the spectrum within specified range.
 struct Fragment {
-    merge_factor: i32,
     spectra: Vec<Spectrum>,
+    merge_factor: i32,
 }
 
 /// Internal container type used by `Dictionary`
-type FragmentMap = HashMap<FragmentKey, Fragment>;
+type FragmentCell = Rc<RefCell<Fragment>>;
+type FragmentMap  = HashMap<FragmentKey, FragmentCell>;
 
 /// `Dictionary` holds fragments associated with bit vectors.
 struct Dictionary<'a> {
@@ -31,17 +39,17 @@ impl FragmentKey {
 impl Fragment {
     fn new() -> Fragment {
         Fragment {
+            spectra: Vec::new(),
             merge_factor: 1,
-            spectra: Vec::new()
         }
     }
 
-    fn slice(&self, index: usize) -> &[Cplx] {
-        &self.spectra[index][..]
+    fn spectrum(&self, slice_index: usize) -> &[Cplx] {
+        &self.spectra[slice_index][..]
     }
 
-    fn slice_mut(&mut self, index: usize) -> &mut Spectrum {
-        &mut self.spectra[index]
+    fn spectrum_mut(&mut self, slice_index: usize) -> &mut Spectrum {
+        &mut self.spectra[slice_index]
     }
 
     fn key(&self, detectors: &[Detector]) -> FragmentKey {
@@ -63,7 +71,7 @@ impl<'a> Dictionary<'a> {
     /// returned. If no match was found, then new item is added.
     fn insert(&mut self, fragment: Fragment) {
         let mut new_key = fragment.key(self.detectors);
-        let mut new_prototype = fragment;
+        let mut new_prototype = Rc::new(RefCell::new(fragment));
 
         loop {
             match self.map.entry(new_key) {
@@ -75,7 +83,7 @@ impl<'a> Dictionary<'a> {
 
                 Entry::Occupied(mut entry) => {
                     let key_differs = {
-                        new_key = Self::merge(entry.get_mut(), &new_prototype);
+                        new_key = Self::merge(&mut entry.get_mut().borrow_mut(), &new_prototype.borrow());
                         *entry.key() != new_key
                     };
 
@@ -92,8 +100,11 @@ impl<'a> Dictionary<'a> {
         }
     }
 
-    fn find(&self, key: &FragmentKey) -> Option<&Fragment> {
-        self.map.get(key)
+    fn find(&self, key: &FragmentKey) -> Option<FragmentCell> {
+        match self.map.get(key) {
+            Some(fragment) => Some(fragment.clone()),
+            None => None
+        }
     }
 
     fn merge(prototype: &mut Fragment, new_prototype: &Fragment) -> FragmentKey {
