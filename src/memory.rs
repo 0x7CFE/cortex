@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -11,20 +11,20 @@ use sound::{Spectrum, Cplx, Detector};
 
 
 #[derive(Hash, Eq, PartialEq, Debug)]
-struct Idea {
-    data: BitVec,
-    bits_set: usize,
+struct SparseBitVec {
     leading_zeros: usize,
     trailing_zeros: usize,
+    bits_set: usize,
+    data: BitVec,
 }
 
-impl Idea {
-    fn new() -> Idea {
-        Idea {
-            data: BitVec::new(),
+impl SparseBitVec {
+    fn new() -> SparseBitVec {
+        SparseBitVec {
             bits_set: 0,
             leading_zeros: 0,
-            trailing_zeros: 0
+            trailing_zeros: 0,
+            data: BitVec::new(),
         }
     }
 
@@ -32,12 +32,12 @@ impl Idea {
         &self.data
     }
 
-    fn from_bitvec(bits: BitVec) -> Idea {
-        let mut idea = Idea {
-            data: bits,
+    fn from_bitvec(bits: BitVec) -> SparseBitVec {
+        let mut idea = SparseBitVec {
             bits_set: 0,
             leading_zeros: 0,
-            trailing_zeros: 0
+            trailing_zeros: 0,
+            data: bits,
         };
 
         for bit in idea.data.iter() {
@@ -60,13 +60,13 @@ impl Idea {
     }
 }
 
-impl PartialOrd for Idea {
+impl PartialOrd for SparseBitVec {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for Idea {
+impl Ord for SparseBitVec {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.leading_zeros < other.leading_zeros {
             Ordering::Less
@@ -78,8 +78,8 @@ impl Ord for Idea {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug)]
-struct FragmentKey(Idea);
+#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct FragmentKey(SparseBitVec);
 
 /// `Fragment` represents several time slices
 /// of the spectrum within specified range.
@@ -92,8 +92,7 @@ const FRAGMENT_SLICES: usize = 8;
 
 /// Internal container type used by `Dictionary`
 type RcFragment  = Rc<Fragment>;
-type FragmentMap = Vec<(FragmentKey, Box<Fragment>)>;
-//type FragmentMap = BTreeMap<(FragmentKey, RcFragment)>;
+type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
 
 /// `Dictionary` holds fragments associated with bit vectors.
 struct Dictionary<'a> {
@@ -103,11 +102,11 @@ struct Dictionary<'a> {
 
 impl FragmentKey {
     fn new() -> FragmentKey {
-        FragmentKey(Idea::new())
+        FragmentKey(SparseBitVec::new())
     }
 
     fn from_bitvec(bits: BitVec) -> FragmentKey {
-        FragmentKey(Idea::from_bitvec(bits))
+        FragmentKey(SparseBitVec::from_bitvec(bits))
     }
 }
 
@@ -176,9 +175,15 @@ impl<'a> Dictionary<'a> {
     }*/
 
     fn find(&self, key: &FragmentKey, similarity: u32) -> Option<&Fragment> {
-        let mask = &key.0.bits();
+        //let mask = &key.0.bits();
 
-        for &(FragmentKey(ref candidate), ref value) in self.map.iter() {
+
+        match self.map.get(key) {
+            Some(fragment) => Some(&fragment),
+            None => None
+        }
+
+        /*for &(FragmentKey(ref candidate), ref value) in self.map.iter() {
             assert_eq!(mask.len(), candidate.bits().len());
 
             // Iterating through the keys looking for similarities.
@@ -194,7 +199,7 @@ impl<'a> Dictionary<'a> {
             }
         }
 
-        None
+        None*/
     }
 
     fn merge(prototype: &mut Fragment, new_prototype: &Fragment) -> FragmentKey {
