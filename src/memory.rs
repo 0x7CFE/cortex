@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::cmp::{Ord, Ordering};
 
 use bit_vec::BitVec;
 
@@ -59,6 +60,23 @@ impl Idea {
     }
 }
 
+impl PartialOrd for Idea {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Idea {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.leading_zeros < other.leading_zeros {
+            Ordering::Less
+        } else if self.leading_zeros > other.leading_zeros {
+            Ordering::Greater
+        } else {
+            self.data.cmp(&other.data)
+        }
+    }
+}
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct FragmentKey(Idea);
@@ -74,7 +92,8 @@ const FRAGMENT_SLICES: usize = 8;
 
 /// Internal container type used by `Dictionary`
 type RcFragment  = Rc<Fragment>;
-type FragmentMap = Vec<(FragmentKey, RcFragment)>;
+type FragmentMap = Vec<(FragmentKey, Box<Fragment>)>;
+//type FragmentMap = BTreeMap<(FragmentKey, RcFragment)>;
 
 /// `Dictionary` holds fragments associated with bit vectors.
 struct Dictionary<'a> {
@@ -156,7 +175,7 @@ impl<'a> Dictionary<'a> {
         }
     }*/
 
-    fn find(&self, key: &FragmentKey, similarity: u32) -> Option<RcFragment> {
+    fn find(&self, key: &FragmentKey, similarity: u32) -> Option<&Fragment> {
         let mask = &key.0.bits();
 
         for &(FragmentKey(ref candidate), ref value) in self.map.iter() {
@@ -170,7 +189,7 @@ impl<'a> Dictionary<'a> {
                 total_match += (b1 & b2).count_ones();
 
                 if total_match >= similarity {
-                    return Some(value.clone());
+                    return Some(value);
                 }
             }
         }
