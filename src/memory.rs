@@ -9,13 +9,14 @@ use bit_vec::BitVec;
 
 use sound::{Spectrum, Cplx, Detector};
 
-
+/// Special wrapper over `BitVec` that optimizes the case when
+/// bit vector contains relatively small amount of set bits.
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct SparseBitVec {
     leading_zeros: usize,
     trailing_zeros: usize,
     bits_set: usize,
-    data: BitVec,
+    bits: BitVec,
 }
 
 impl SparseBitVec {
@@ -24,12 +25,12 @@ impl SparseBitVec {
             bits_set: 0,
             leading_zeros: 0,
             trailing_zeros: 0,
-            data: BitVec::new(),
+            bits: BitVec::new(),
         }
     }
 
     fn bits(&self) -> &BitVec {
-        &self.data
+        &self.bits
     }
 
     fn from_bitvec(bits: BitVec) -> SparseBitVec {
@@ -37,10 +38,10 @@ impl SparseBitVec {
             bits_set: 0,
             leading_zeros: 0,
             trailing_zeros: 0,
-            data: bits,
+            bits: bits,
         };
 
-        for bit in idea.data.iter() {
+        for bit in &idea.bits {
             if bit {
                 idea.bits_set += 1;
                 idea.trailing_zeros = 0;
@@ -56,7 +57,7 @@ impl SparseBitVec {
     }
 
     fn into_bitvec(self) -> BitVec {
-        self.data
+        self.bits
     }
 }
 
@@ -66,39 +67,23 @@ impl PartialOrd for SparseBitVec {
     }
 }
 
+/// Special implementation that is aware of vector's internal structure
 impl Ord for SparseBitVec {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.leading_zeros < other.leading_zeros {
-            Ordering::Less
-        } else if self.leading_zeros > other.leading_zeros {
             Ordering::Greater
+        } else if self.leading_zeros > other.leading_zeros {
+            Ordering::Less
         } else {
-            self.data.cmp(&other.data)
+            self.bits.cmp(&other.bits)
         }
     }
 }
 
+/// Sparse bit vector acting as a key of a fragment.
+/// Type is used to differ fragment keys from other vectors.
 #[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct FragmentKey(SparseBitVec);
-
-/// `Fragment` represents several time slices
-/// of the spectrum within specified range.
-struct Fragment {
-    spectra: Vec<Spectrum>,
-    merge_factor: i32,
-}
-
-const FRAGMENT_SLICES: usize = 8;
-
-/// Internal container type used by `Dictionary`
-type RcFragment  = Rc<Fragment>;
-type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
-
-/// `Dictionary` holds fragments associated with bit vectors.
-struct Dictionary<'a> {
-    map: FragmentMap,
-    detectors: &'a [Detector]
-}
 
 impl FragmentKey {
     fn new() -> FragmentKey {
@@ -110,11 +95,34 @@ impl FragmentKey {
     }
 }
 
+/// Amount of spectrum slices per single fragment
+const SPECTRA_PER_FRAGMENT: usize = 8;
+
+/// `Fragment` represents several time slices
+/// of the spectrum within specified range.
+struct Fragment {
+    /// Complete slice of DFT.
+    spectra: Vec<Spectrum>,
+
+    /// Weight of fragment as prototype.
+    /// Used during merge process.
+    merge_weight: i32,
+}
+
+/// Internal container type used by `Dictionary`
+type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
+
+/// `Dictionary` holds fragments associated with bit vectors.
+struct Dictionary<'a> {
+    map: FragmentMap,
+    detectors: &'a [Detector]
+}
+
 impl Fragment {
     fn new() -> Fragment {
         Fragment {
-            spectra: Vec::new(),
-            merge_factor: 1,
+            spectra: Vec::with_capacity(SPECTRA_PER_FRAGMENT),
+            merge_weight: 1,
         }
     }
 
@@ -127,7 +135,7 @@ impl Fragment {
     }
 
     fn key(&self, detectors: &[Detector]) -> FragmentKey {
-        FragmentKey::new()
+        FragmentKey::new() // TODO
     }
 }
 
@@ -203,8 +211,8 @@ impl<'a> Dictionary<'a> {
     }
 
     fn merge(prototype: &mut Fragment, new_prototype: &Fragment) -> FragmentKey {
-        prototype.merge_factor += new_prototype.merge_factor;
+        prototype.merge_weight += new_prototype.merge_weight;
 
-        FragmentKey::new()
+        FragmentKey::new() // TODO
     }
 }
