@@ -1,9 +1,11 @@
+
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
+use std::collections::Bound::{Included, Excluded, Unbounded};
 
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::cmp::{Ord, Ordering};
+use std::cmp::{Ord, Ordering, max};
 
 use bit_vec::BitVec;
 
@@ -58,6 +60,29 @@ impl SparseBitVec {
 
     fn into_bitvec(self) -> BitVec {
         self.bits
+    }
+
+    fn fuzzy_eq(&self, other: &Self, similarity: usize) -> bool {
+        if max(self.bits_set, other.bits_set) < similarity {
+            // Not enough set bits to match
+            return false;
+        }
+
+        // Iterating through the bits looking for similarities.
+        // When there are more than `similarity` matched bits
+        // vectors are said to be matching. Otherwise it is a no-match.
+        let mut total_match = 0;
+
+        // TODO Take advantage of leading and trailing zeros
+        for (b1, b2) in self.bits.blocks().zip(other.bits.blocks()) {
+            total_match += (b1 & b2).count_ones() as usize;
+
+            if total_match >= similarity {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -151,12 +176,28 @@ impl<'a> Dictionary<'a> {
     /// contains fragment that is similar enough to the one provided
     /// then fragments are merged together and the hash of result is
     /// returned. If no match was found, then new item is added.
-    /*fn insert(&mut self, fragment: Fragment) {
+    fn insert(&mut self, fragment: Fragment, similarity: usize) {
         let mut new_key = fragment.key(self.detectors);
-        let mut new_prototype = Rc::new(fragment);
+        let mut new_prototype = Box::new(fragment);
 
         loop {
-            match self.map.entry(new_key) {
+            // TODO: From zero up to new key, shift lower bound.
+
+            // Iterating through the keys looking for similarities.
+            // When there are more than `similarity` matched bits
+            // keys are said to be matching. Otherwise it is a no-match.
+            let mut total_match = 0;
+            for (key, value) in self.map.range_mut(Unbounded, Included(&new_key)).rev() {
+                if key.0.fuzzy_eq(&new_key.0, similarity) {
+                    return;
+                }
+            }
+
+            // No match was found, simply inserting new fragment as prototype
+            self.map.insert(new_key, new_prototype);
+            return;
+
+            /*match self.map.entry(new_key) {
                 Entry::Vacant(entry) => {
                     // Fragment is unique, inserting it as prototype
                     entry.insert(new_prototype);
@@ -165,7 +206,7 @@ impl<'a> Dictionary<'a> {
 
                 Entry::Occupied(mut entry) => {
                     let key_differs = {
-                        new_key = Self::merge(Rc::get_mut(entry.get_mut()).unwrap(), &new_prototype);
+                        new_key = Self::merge(entry.get_mut(), &new_prototype);
                         *entry.key() != new_key
                     };
 
@@ -178,9 +219,9 @@ impl<'a> Dictionary<'a> {
                         break;
                     }
                 }
-            }
+            }*/
         }
-    }*/
+    }
 
     fn find(&self, key: &FragmentKey, similarity: u32) -> Option<&Fragment> {
         //let mask = &key.0.bits();

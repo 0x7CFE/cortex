@@ -1,4 +1,6 @@
 
+#![feature(btree_range, collections_bound)]
+
 extern crate num_traits;
 extern crate num_complex;
 extern crate bit_vec;
