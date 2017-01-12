@@ -264,3 +264,73 @@ impl<'a> Dictionary<'a> {
         FragmentKey::new() // TODO
     }
 }
+
+#[cfg(test)]
+mod sparse_bitvec {
+    use super::{BitVec, SparseBitVec};
+
+    #[test] fn new() {
+        let vec = SparseBitVec::new();
+        assert_eq!(vec.bits_set, 0);
+        assert_eq!(vec.leading_zeros, 0);
+        assert_eq!(vec.trailing_zeros, 0);
+    }
+
+    #[test] fn from_bitvec() {
+        let bv = BitVec::from_bytes(&[0b_0000_0001, 0b_1010_0000, 0b_0001_0011, 0b_0000_0000]);
+        let sv = SparseBitVec::from_bitvec(bv);
+
+        assert_eq!(sv.bits_set, 6);
+        assert_eq!(sv.leading_zeros, 7);
+        assert_eq!(sv.trailing_zeros, 8);
+    }
+
+    #[test] fn zeros() {
+        let plan = vec![
+            // mask          leading  trailing
+            ([0b_1111_1111], 0,       0),
+            ([0b_1000_0001], 0,       0),
+            ([0b_1000_0000], 0,       7),
+            ([0b_0000_0001], 7,       0),
+            ([0b_0100_0010], 1,       1),
+            ([0b_0010_0100], 2,       2),
+            ([0b_0001_1000], 3,       3),
+            ([0b_0000_0000], 8,       8),
+        ];
+
+        for (mask, leading, trailing) in plan {
+            let bv = BitVec::from_bytes(&mask);
+            let sv = SparseBitVec::from_bitvec(bv);
+
+            assert_eq!(sv.leading_zeros, leading);
+            assert_eq!(sv.trailing_zeros, trailing);
+        }
+    }
+
+    #[test] fn set_bits() {
+        let plan = vec![
+            // mask         bits set
+            ([0b_0000_0000], 0),
+            ([0b_1111_1111], 8),
+            ([0b_1010_1010], 4),
+            ([0b_0101_0101], 4),
+
+            ([0b_1000_0000], 1),
+            ([0b_0000_0001], 1),
+
+            ([0b_1000_0001], 2),
+            ([0b_0001_1000], 2),
+
+            ([0b_1000_0000], 1),
+            ([0b_1000_0000], 1),
+
+        ];
+
+        for (mask, bits) in plan {
+            let bv = BitVec::from_bytes(&mask);
+            let sv = SparseBitVec::from_bitvec(bv);
+
+            assert_eq!(sv.bits_set, bits);
+        }
+    }
+}
