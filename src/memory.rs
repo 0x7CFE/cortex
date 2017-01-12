@@ -13,7 +13,7 @@ use sound::{Spectrum, Cplx, Detector};
 
 /// Special wrapper over `BitVec` that optimizes the case when
 /// bit vector contains relatively small amount of set bits.
-#[derive(Hash, Eq, PartialEq, Debug)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
 struct SparseBitVec {
     leading_zeros: usize,
     trailing_zeros: usize,
@@ -62,27 +62,14 @@ impl SparseBitVec {
         self.bits
     }
 
-    fn fuzzy_eq(&self, other: &Self, similarity: usize) -> bool {
-        if max(self.bits_set, other.bits_set) < similarity {
-            // Not enough set bits to match
-            return false;
-        }
+    fn fuzzy_eq(&self, other: &Self) -> usize {
+        // Iterating through the vectors counting similarities
+        let matched_bits = self
+            .bits.blocks()
+            .zip(other.bits.blocks())
+            .fold(0, |count, (b1, b2)| count + (b1 & b2).count_ones() as usize);
 
-        // Iterating through the bits looking for similarities.
-        // When there are more than `similarity` matched bits
-        // vectors are said to be matching. Otherwise it is a no-match.
-        let mut total_match = 0;
-
-        // TODO Take advantage of leading and trailing zeros
-        for (b1, b2) in self.bits.blocks().zip(other.bits.blocks()) {
-            total_match += (b1 & b2).count_ones() as usize;
-
-            if total_match >= similarity {
-                return true;
-            }
-        }
-
-        false
+        matched_bits
     }
 }
 
@@ -107,7 +94,7 @@ impl Ord for SparseBitVec {
 
 /// Sparse bit vector acting as a key of a fragment.
 /// Type is used to differ fragment keys from other vectors.
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct FragmentKey(SparseBitVec);
 
 impl FragmentKey {
@@ -172,54 +159,73 @@ impl<'a> Dictionary<'a> {
         }
     }
 
+    fn lower_bound(key: &FragmentKey) -> FragmentKey {
+        let mask = &key.0;
+        let len = mask.bits.len();
+
+        // Set all bits except trailing zeros to zero
+        FragmentKey(SparseBitVec::from_bitvec(BitVec::from_fn(len, |x| {
+            x > mask.leading_zeros + mask.bits_set
+        })))
+    }
+
     /// Insert a fragment into the dictionary. If dictionary already
     /// contains fragment that is similar enough to the one provided
     /// then fragments are merged together and the hash of result is
     /// returned. If no match was found, then new item is added.
     fn insert(&mut self, fragment: Fragment, similarity: usize) {
+
         let mut new_key = fragment.key(self.detectors);
+        assert!(new_key.0.bits_set > 0);
+
         let mut new_prototype = Box::new(fragment);
+        let mut key_differs = false;
+
+        // Lower bound is the least meaningful element of the dictionary
+        // which, if represented by a number, is less than the key's number
+        let mut lower_bound = Self::lower_bound(&new_key);
 
         loop {
-            // TODO: From zero up to new key, shift lower bound.
+            // If previous merge resulted in a changed key, then
+            // we need to reinsert the value probably merging it again.
+            if key_differs {
+                // New key now stores key after merge
+                new_prototype = self.map.remove(&new_key).unwrap();
 
-            // Iterating through the keys looking for similarities.
-            // When there are more than `similarity` matched bits
-            // keys are said to be matching. Otherwise it is a no-match.
-            let mut total_match = 0;
-            for (key, value) in self.map.range_mut(Unbounded, Included(&new_key)).rev() {
-                if key.0.fuzzy_eq(&new_key.0, similarity) {
-                    return;
+                // Recalculating lower bound if new key have more bits to the right
+                if new_key.0.trailing_zeros < lower_bound.0.bits_set {
+                    lower_bound = Self::lower_bound(&new_key);
                 }
             }
 
-            // No match was found, simply inserting new fragment as prototype
-            self.map.insert(new_key, new_prototype);
-            return;
+            {
+                // Finding best blace to merge-in the new value
+                let (best_key, best_value, matched_bits) = self.map
+                        .range_mut(Excluded(&lower_bound), Included(&new_key))
+                        .map(|(key, value)| (key, value, key.0.fuzzy_eq(&new_key.0)))
+                        .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
+                        .unwrap();
 
-            /*match self.map.entry(new_key) {
-                Entry::Vacant(entry) => {
-                    // Fragment is unique, inserting it as prototype
-                    entry.insert(new_prototype);
-                    break;
-                },
+                if matched_bits >= similarity {
+                    // Best match is suitable for merge. Merging values
+                    // and checking that the key wasn't changed during merge.
 
-                Entry::Occupied(mut entry) => {
-                    let key_differs = {
-                        new_key = Self::merge(entry.get_mut(), &new_prototype);
-                        *entry.key() != new_key
-                    };
+                    new_key = Self::merge(best_value, &new_prototype);
+                    key_differs = *best_key != new_key;
 
                     if key_differs {
-                        // Need to re-insert with a new key
-                        let (_, prototype) = entry.remove_entry();
-                        new_prototype = prototype;
+                        // Next iteration will re-insert the prototype at proper place
+                        continue;
                     } else {
-                        // Key is the same, all is OK
+                        // Nothing to do, merge is complete
                         break;
                     }
                 }
-            }*/
+            }
+
+            // No suitable match was found,  inserting new fragment as new prototype
+            self.map.insert(new_key, new_prototype);
+            break;
         }
     }
 
