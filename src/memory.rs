@@ -170,62 +170,63 @@ impl<'a> Dictionary<'a> {
     }
 
     /// Insert a fragment into the dictionary. If dictionary already
-    /// contains fragment that is similar enough to the one provided
-    /// then fragments are merged together and the hash of result is
-    /// returned. If no match was found, then new item is added.
+    /// contains fragment that is similar enough to the provided one
+    /// then fragments are merged together. If no suitable match was
+    /// found, then new item is inserted as is.
     fn insert(&mut self, fragment: Fragment, similarity: usize) {
 
-        let mut new_key = fragment.key(self.detectors);
-        assert!(new_key.0.bits_set > 0);
+        let mut pending_key = fragment.key(self.detectors);
+        let mut pending_value = Box::new(fragment);
 
-        let mut new_prototype = Box::new(fragment);
-        let mut key_differs = false;
+        // FIXME Should we treat is as NOOP if empty key is pending?
+        assert!(pending_key.0.bits_set > 0);
 
         // Lower bound is the least meaningful element of the dictionary
         // which, if represented by a number, is less than the key's number
-        let mut lower_bound = Self::lower_bound(&new_key);
+        let mut lower_bound = Self::lower_bound(&pending_key);
 
         loop {
-            // If previous merge resulted in a changed key, then
-            // we need to reinsert the value probably merging it again.
-            if key_differs {
-                // New key now stores key after merge
-                new_prototype = self.map.remove(&new_key).unwrap();
-
-                // Recalculating lower bound if new key have more bits to the right
-                if new_key.0.trailing_zeros < lower_bound.0.bits_set {
-                    lower_bound = Self::lower_bound(&new_key);
-                }
-            }
-
-            {
-                // Finding best blace to merge-in the new value
-                let (best_key, best_value, matched_bits) = self.map
-                        .range_mut(Excluded(&lower_bound), Included(&new_key))
-                        .map(|(key, value)| (key, value, key.0.fuzzy_eq(&new_key.0)))
+            let key_changed = {
+                // Finding best entry to merge-in the new value
+                if let Some((key, value, matched_bits)) = self.map
+                        .range_mut(Excluded(&lower_bound), Included(&pending_key))
+                        .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
+                        .filter(|&(_, _, m)| m >= similarity)
                         .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
-                        .unwrap();
-
-                if matched_bits >= similarity {
+                {
                     // Best match is suitable for merge. Merging values
                     // and checking that the key wasn't changed during merge.
+                    pending_key = Self::merge(value, &pending_value);
 
-                    new_key = Self::merge(best_value, &new_prototype);
-                    key_differs = *best_key != new_key;
-
-                    if key_differs {
-                        // Next iteration will re-insert the prototype at proper place
-                        continue;
-                    } else {
-                        // Nothing to do, merge is complete
-                        break;
+                    // If key wasn't changed after merge then all is consistent
+                    if *key == pending_key {
+                        return;
                     }
-                }
-            }
 
-            // No suitable match was found,  inserting new fragment as new prototype
-            self.map.insert(new_key, new_prototype);
-            break;
+                    // Looks like key was changed after merge. We need to re-insert
+                    // the merged value into the dictionary at the proper place
+                    true
+                } else {
+                    // Not enough matched bits to merge or dictionary is still empty
+                    false
+                }
+            };
+
+            // If merge resulted in a changed key, then we need to reinsert
+            // the value probably merging it again. Preparing for the next iteration.
+            if key_changed {
+                // New key now stores key after merge
+                pending_value = self.map.remove(&pending_key).unwrap();
+
+                // Recalculating lower bound if new key has more bits to the right
+                if pending_key.0.trailing_zeros < lower_bound.0.bits_set {
+                    lower_bound = Self::lower_bound(&pending_key);
+                }
+            } else {
+                // No suitable match was found, inserting fragment as the new prototype
+                self.map.insert(pending_key, pending_value);
+                return;
+            }
         }
     }
 
@@ -257,8 +258,8 @@ impl<'a> Dictionary<'a> {
         None*/
     }
 
-    fn merge(prototype: &mut Fragment, new_prototype: &Fragment) -> FragmentKey {
-        prototype.merge_weight += new_prototype.merge_weight;
+    fn merge(prototype: &mut Fragment, pending_value: &Fragment) -> FragmentKey {
+        prototype.merge_weight += pending_value.merge_weight;
 
         FragmentKey::new() // TODO
     }
