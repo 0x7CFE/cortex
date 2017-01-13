@@ -256,7 +256,7 @@ impl<'a> Dictionary<'a> {
 
 #[cfg(test)]
 mod sparse_bitvec {
-    use super::{BitVec, SparseBitVec};
+    use super::*;
 
     #[test] fn new() {
         let vec = SparseBitVec::new();
@@ -322,4 +322,38 @@ mod sparse_bitvec {
             assert_eq!(sv.bits_set, bits);
         }
     }
+
+    #[test] fn cmp() {
+        let plan = vec![
+            // first vector  second vector   order
+            ([0b_0000_0000], [0b_0000_0000], Ordering::Equal),
+            ([0b_1111_1111], [0b_1111_1111], Ordering::Equal),
+            ([0b_0111_1111], [0b_0111_1111], Ordering::Equal),
+            ([0b_1111_1110], [0b_1111_1110], Ordering::Equal),
+            ([0b_0001_1000], [0b_0001_1000], Ordering::Equal),
+
+            ([0b_0000_0000], [0b_0000_0001], Ordering::Less),
+            ([0b_1111_1110], [0b_1111_1111], Ordering::Less),
+            ([0b_1111_0000], [0b_1111_0001], Ordering::Less),
+            ([0b_1111_1110], [0b_1111_1111], Ordering::Less),
+            ([0b_0011_1100], [0b_0011_1110], Ordering::Less),
+            ([0b_0101_0101], [0b_1010_1010], Ordering::Less),
+
+            ([0b_0000_0001], [0b_0000_0000], Ordering::Greater),
+            ([0b_1111_1111], [0b_1111_1110], Ordering::Greater),
+            ([0b_1111_0001], [0b_1111_0000], Ordering::Greater),
+            ([0b_1111_1111], [0b_1111_1110], Ordering::Greater),
+            ([0b_0011_1110], [0b_0011_1100], Ordering::Greater),
+            ([0b_1010_1010], [0b_0101_0101], Ordering::Greater),
+        ];
+
+        for (b1, b2, order) in plan {
+            let v1 = SparseBitVec::from_bitvec(BitVec::from_bytes(&b1));
+            let v2 = SparseBitVec::from_bitvec(BitVec::from_bytes(&b2));
+
+            assert_eq!(v1.cmp(&v2), order, "{:?} vs {:?}", v1, v2);
+            assert_eq!(v1.partial_cmp(&v2), Some(order), "{:?} vs {:?}", v1, v2);
+        }
+    }
+}
 }
