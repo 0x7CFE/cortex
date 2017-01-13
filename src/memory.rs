@@ -14,7 +14,7 @@ use sound::{Spectrum, Cplx, Detector};
 /// Special wrapper over `BitVec` that optimizes the case when
 /// bit vector contains relatively small amount of set bits.
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
-struct SparseBitVec {
+pub struct SparseBitVec {
     leading_zeros: usize,
     trailing_zeros: usize,
     bits_set: usize,
@@ -22,7 +22,7 @@ struct SparseBitVec {
 }
 
 impl SparseBitVec {
-    fn new() -> SparseBitVec {
+    pub fn new() -> SparseBitVec {
         SparseBitVec {
             bits_set: 0,
             leading_zeros: 0,
@@ -31,11 +31,11 @@ impl SparseBitVec {
         }
     }
 
-    fn bits(&self) -> &BitVec {
+    pub fn bits(&self) -> &BitVec {
         &self.bits
     }
 
-    fn from_bitvec(bits: BitVec) -> SparseBitVec {
+    pub fn from_bitvec(bits: BitVec) -> SparseBitVec {
         let mut idea = SparseBitVec {
             bits_set: 0,
             leading_zeros: 0,
@@ -58,11 +58,11 @@ impl SparseBitVec {
         idea
     }
 
-    fn into_bitvec(self) -> BitVec {
+    pub fn into_bitvec(self) -> BitVec {
         self.bits
     }
 
-    fn fuzzy_eq(&self, other: &Self) -> usize {
+    pub fn fuzzy_eq(&self, other: &Self) -> usize {
         // Iterating through the vectors counting similarities
         let matched_bits = self
             .bits.blocks()
@@ -95,24 +95,24 @@ impl Ord for SparseBitVec {
 /// Sparse bit vector acting as a key of a fragment.
 /// Type is used to differ fragment keys from other vectors.
 #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
-struct FragmentKey(SparseBitVec);
+pub struct FragmentKey(SparseBitVec);
 
 impl FragmentKey {
-    fn new() -> FragmentKey {
+    pub fn new() -> FragmentKey {
         FragmentKey(SparseBitVec::new())
     }
 
-    fn from_bitvec(bits: BitVec) -> FragmentKey {
+    pub fn from_bitvec(bits: BitVec) -> FragmentKey {
         FragmentKey(SparseBitVec::from_bitvec(bits))
     }
 }
 
 /// Amount of spectrum slices per single fragment
-const SPECTRA_PER_FRAGMENT: usize = 8;
+pub const SPECTRA_PER_FRAGMENT: usize = 8;
 
 /// `Fragment` represents several time slices
 /// of the spectrum within specified range.
-struct Fragment {
+pub struct Fragment {
     /// Complete slice of DFT.
     spectra: Vec<Spectrum>,
 
@@ -125,41 +125,47 @@ struct Fragment {
 type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
 
 /// `Dictionary` holds fragments associated with bit vectors.
-struct Dictionary<'a> {
+pub struct Dictionary<'a> {
     map: FragmentMap,
     detectors: &'a [Detector]
 }
 
 impl Fragment {
-    fn new() -> Fragment {
+    pub fn new() -> Fragment {
         Fragment {
             spectra: Vec::with_capacity(SPECTRA_PER_FRAGMENT),
             merge_weight: 1,
         }
     }
 
-    fn spectrum(&self, slice_index: usize) -> &[Cplx] {
+    pub fn spectrum(&self, slice_index: usize) -> &[Cplx] {
         &self.spectra[slice_index][..]
     }
 
-    fn spectrum_mut(&mut self, slice_index: usize) -> &mut Spectrum {
+    pub fn spectrum_mut(&mut self, slice_index: usize) -> &mut Spectrum {
         &mut self.spectra[slice_index]
     }
 
-    fn key(&self, detectors: &[Detector]) -> FragmentKey {
-        FragmentKey::new() // TODO
+    pub fn key(&self, detectors: &[Detector]) -> FragmentKey {
+        let mut result = BitVec::new();
+
+        for spectre in self.spectra.iter() {
+            sound::filter_detectors_inplace(&spectre, detectors, &mut result);
+        }
+
+        FragmentKey::from_bitvec(result)
     }
 }
 
 impl<'a> Dictionary<'a> {
-    fn new(detectors: &[Detector]) -> Dictionary {
+    pub fn new(detectors: &[Detector]) -> Dictionary {
         Dictionary {
             map: FragmentMap::new(),
             detectors: detectors
         }
     }
 
-    fn lower_bound(key: &FragmentKey) -> FragmentKey {
+    pub fn lower_bound(key: &FragmentKey) -> FragmentKey {
         let mask = &key.0;
         let len = mask.bits.len();
 
@@ -173,7 +179,7 @@ impl<'a> Dictionary<'a> {
     /// contains fragment that is similar enough to the provided one
     /// then fragments are merged together. If no suitable match was
     /// found, then new item is inserted as is.
-    fn insert(&mut self, fragment: Fragment, similarity: usize) {
+    pub fn insert(&mut self, fragment: Fragment, similarity: usize) {
 
         let mut pending_key = fragment.key(self.detectors);
         let mut pending_value = Box::new(fragment);
@@ -230,7 +236,7 @@ impl<'a> Dictionary<'a> {
         }
     }
 
-    fn find(&self, key: &FragmentKey, similarity: usize) -> Option<&Fragment> {
+    pub fn find(&self, key: &FragmentKey, similarity: usize) -> Option<&Fragment> {
         // Lower bound is the least meaningful element of the dictionary
         // which, if represented by a number, is less than the key's number
         let lower_bound = Self::lower_bound(&key);
