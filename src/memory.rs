@@ -188,18 +188,18 @@ impl<'a> Dictionary<'a> {
         loop {
             let key_changed = {
                 // Finding best entry to merge-in the new value
-                if let Some((key, value, matched_bits)) = self.map
-                        .range_mut(Excluded(&lower_bound), Included(&pending_key))
-                        .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
-                        .filter(|&(_, _, m)| m >= similarity)
-                        .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
+                if let Some((ref key, ref mut value, matched_bits)) = self.map
+                    .range_mut(Excluded(&lower_bound), Included(&pending_key))
+                    .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
+                    .filter(|&(_, _, m)| m >= similarity)
+                    .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
                 {
                     // Best match is suitable for merge. Merging values
                     // and checking that the key wasn't changed during merge.
                     pending_key = Self::merge(value, &pending_value);
 
                     // If key wasn't changed after merge then all is consistent
-                    if *key == pending_key {
+                    if **key == pending_key {
                         return;
                     }
 
@@ -230,32 +230,21 @@ impl<'a> Dictionary<'a> {
         }
     }
 
-    fn find(&self, key: &FragmentKey, similarity: u32) -> Option<&Fragment> {
-        //let mask = &key.0.bits();
+    fn find(&self, key: &FragmentKey, similarity: usize) -> Option<&Fragment> {
+        // Lower bound is the least meaningful element of the dictionary
+        // which, if represented by a number, is less than the key's number
+        let lower_bound = Self::lower_bound(&key);
 
-
-        match self.map.get(key) {
-            Some(fragment) => Some(&fragment),
-            None => None
+        if let Some((_, ref value, _)) = self.map
+            .range(Excluded(&lower_bound), Included(&key))
+            .map(|(k, v)| (k, v, k.0.fuzzy_eq(&key.0)))
+            .filter(|&(_, _, m)| m >= similarity)
+            .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
+        {
+            Some(&value)
+        } else {
+            None
         }
-
-        /*for &(FragmentKey(ref candidate), ref value) in self.map.iter() {
-            assert_eq!(mask.len(), candidate.bits().len());
-
-            // Iterating through the keys looking for similarities.
-            // When there are more than `similarity` matched bits
-            // keys are said to be matching. Otherwise it is a no-match.
-            let mut total_match = 0;
-            for (b1, b2) in mask.blocks().zip(candidate.bits().blocks()) {
-                total_match += (b1 & b2).count_ones();
-
-                if total_match >= similarity {
-                    return Some(value);
-                }
-            }
-        }
-
-        None*/
     }
 
     fn merge(prototype: &mut Fragment, pending_value: &Fragment) -> FragmentKey {
