@@ -153,6 +153,7 @@ impl Fragment {
     pub fn key(&self, detectors: &[Detector]) -> FragmentKey {
         let mut result = BitVec::new();
 
+        // FIXME Should filter by detectors within the dictionary's range
         for spectre in self.spectra.iter() {
             sound::filter_detectors_inplace(&spectre, detectors, &mut result);
         }
@@ -206,7 +207,7 @@ impl<'a> Dictionary<'a> {
                 {
                     // Best match is suitable for merge. Merging values
                     // and checking that the key wasn't changed during merge.
-                    pending_key = Self::merge(value, &pending_value);
+                    pending_key = Self::merge(self.detectors, value, &pending_value);
 
                     // If key wasn't changed after merge then all is consistent
                     if **key == pending_key {
@@ -257,10 +258,29 @@ impl<'a> Dictionary<'a> {
         }
     }
 
-    fn merge(prototype: &mut Fragment, pending_value: &Fragment) -> FragmentKey {
-        prototype.merge_weight += pending_value.merge_weight;
+    fn merge(detectors: &[Detector], prototype: &mut Fragment, value: &Fragment) -> FragmentKey {
+        assert_eq!(prototype.spectra.len(), value.spectra.len());
 
-        FragmentKey::new() // TODO
+        let dest_weight = prototype.merge_weight as f32 / (prototype.merge_weight + value.merge_weight) as f32;
+        let src_weight  = value.merge_weight as f32 / (prototype.merge_weight + value.merge_weight) as f32;
+
+        // For each spectrum slice merging complex values by weight
+        for (dest, src) in prototype.spectra.iter_mut().zip(value.spectra.iter()) {
+            assert_eq!(dest.len(), src.len());
+
+            for (c1, c2) in dest.iter_mut().zip(src.iter()) {
+                let new_norm  = c1.norm() * dest_weight + c2.norm() * src_weight;
+                let new_tetha = c1.arg()  * dest_weight + c2.arg()  * src_weight;
+
+                *c1 = Cplx::from_polar(&new_norm, &new_tetha);
+            }
+        }
+
+        // Prototype now accumulates both values, so it's weight increases
+        prototype.merge_weight += value.merge_weight;
+
+        // TODO Calculate during merge
+        prototype.key(detectors)
     }
 }
 
