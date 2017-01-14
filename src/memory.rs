@@ -58,6 +58,10 @@ impl SparseBitVec {
         idea
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> SparseBitVec {
+        Self::from_bitvec(BitVec::from_bytes(bytes))
+    }
+
     pub fn into_bitvec(self) -> BitVec {
         self.bits
     }
@@ -272,12 +276,16 @@ mod sparse_bitvec {
     }
 
     #[test] fn from_bitvec() {
-        let bv = BitVec::from_bytes(&[0b_0000_0001, 0b_1010_0000, 0b_0001_0011, 0b_0000_0000]);
-        let sv = SparseBitVec::from_bitvec(bv);
+        let vec = SparseBitVec::from_bytes(&[
+            0b_0000_0001,
+            0b_1010_0000,
+            0b_0001_0011,
+            0b_0000_0000
+        ]);
 
-        assert_eq!(sv.bits_set, 6);
-        assert_eq!(sv.leading_zeros, 7);
-        assert_eq!(sv.trailing_zeros, 8);
+        assert_eq!(vec.bits_set, 6);
+        assert_eq!(vec.leading_zeros, 7);
+        assert_eq!(vec.trailing_zeros, 8);
     }
 
     #[test] fn zeros() {
@@ -294,11 +302,10 @@ mod sparse_bitvec {
         ];
 
         for (mask, leading, trailing) in plan {
-            let bv = BitVec::from_bytes(&mask);
-            let sv = SparseBitVec::from_bitvec(bv);
+            let vec = SparseBitVec::from_bytes(&mask);
 
-            assert_eq!(sv.leading_zeros, leading);
-            assert_eq!(sv.trailing_zeros, trailing);
+            assert_eq!(vec.leading_zeros, leading);
+            assert_eq!(vec.trailing_zeros, trailing);
         }
     }
 
@@ -322,10 +329,9 @@ mod sparse_bitvec {
         ];
 
         for (mask, bits) in plan {
-            let bv = BitVec::from_bytes(&mask);
-            let sv = SparseBitVec::from_bitvec(bv);
+            let vec = SparseBitVec::from_bytes(&mask);
 
-            assert_eq!(sv.bits_set, bits);
+            assert_eq!(vec.bits_set, bits);
         }
     }
 
@@ -354,8 +360,8 @@ mod sparse_bitvec {
         ];
 
         for (b1, b2, order) in plan {
-            let v1 = SparseBitVec::from_bitvec(BitVec::from_bytes(&b1));
-            let v2 = SparseBitVec::from_bitvec(BitVec::from_bytes(&b2));
+            let v1 = SparseBitVec::from_bytes(&b1);
+            let v2 = SparseBitVec::from_bytes(&b2);
 
             assert_eq!(v1.cmp(&v2), order, "{:?} vs {:?}", v1, v2);
             assert_eq!(v1.partial_cmp(&v2), Some(order), "{:?} vs {:?}", v1, v2);
