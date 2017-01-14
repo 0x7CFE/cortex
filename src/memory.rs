@@ -309,7 +309,7 @@ mod sparse_bitvec {
     }
 
     #[test] fn zeros() {
-        let plan = vec![
+        let plan = &[
             // mask          leading  trailing
             ([0b_1111_1111], 0,       0),
             ([0b_1000_0001], 0,       0),
@@ -321,7 +321,7 @@ mod sparse_bitvec {
             ([0b_0000_0000], 8,       8),
         ];
 
-        for (mask, leading, trailing) in plan {
+        for &(mask, leading, trailing) in plan {
             let vec = SparseBitVec::from_bytes(&mask);
 
             assert_eq!(vec.leading_zeros, leading);
@@ -330,7 +330,7 @@ mod sparse_bitvec {
     }
 
     #[test] fn set_bits() {
-        let plan = vec![
+        let plan = &[
             // mask         bits set
             ([0b_0000_0000], 0),
             ([0b_1111_1111], 8),
@@ -348,7 +348,7 @@ mod sparse_bitvec {
 
         ];
 
-        for (mask, bits) in plan {
+        for &(mask, bits) in plan {
             let vec = SparseBitVec::from_bytes(&mask);
 
             assert_eq!(vec.bits_set, bits);
@@ -356,7 +356,7 @@ mod sparse_bitvec {
     }
 
     #[test] fn cmp() {
-        let plan = vec![
+        let plan = &[
             // first vector  second vector   order
             ([0b_0000_0000], [0b_0000_0000], Ordering::Equal),
             ([0b_1111_1111], [0b_1111_1111], Ordering::Equal),
@@ -379,7 +379,7 @@ mod sparse_bitvec {
             ([0b_1010_1010], [0b_0101_0101], Ordering::Greater),
         ];
 
-        for (b1, b2, order) in plan {
+        for &(b1, b2, order) in plan {
             let v1 = SparseBitVec::from_bytes(&b1);
             let v2 = SparseBitVec::from_bytes(&b2);
 
