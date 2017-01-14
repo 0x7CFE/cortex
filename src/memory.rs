@@ -199,7 +199,7 @@ impl<'a> Dictionary<'a> {
         loop {
             let key_changed = {
                 // Finding best entry to merge-in the new value
-                if let Some((ref key, ref mut value, matched_bits)) = self.map
+                if let Some((key, value, matched_bits)) = self.map
                     .range_mut(Excluded(&lower_bound), Included(&pending_key))
                     .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
                     .filter(|&(_, _, m)| m >= similarity)
@@ -210,7 +210,7 @@ impl<'a> Dictionary<'a> {
                     pending_key = Self::merge(self.detectors, value, &pending_value);
 
                     // If key wasn't changed after merge then all is consistent
-                    if **key == pending_key {
+                    if *key == pending_key {
                         return;
                     }
 
@@ -246,13 +246,13 @@ impl<'a> Dictionary<'a> {
         // which, if represented by a number, is less than the key's number
         let lower_bound = Self::lower_bound(&key);
 
-        if let Some((_, ref value, _)) = self.map
+        if let Some((_, value, _)) = self.map
             .range(Excluded(&lower_bound), Included(&key))
             .map(|(k, v)| (k, v, k.0.fuzzy_eq(&key.0)))
             .filter(|&(_, _, m)| m >= similarity)
             .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
         {
-            Some(&value)
+            Some(value)
         } else {
             None
         }
