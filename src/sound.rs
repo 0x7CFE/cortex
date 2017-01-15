@@ -16,8 +16,8 @@ use itertools::Itertools;
 use iter::{CollectChunks, CollectChunksExt};
 
 // TODO Move to the Detector as individual field
-const AMPLITUDE_DEVIATION_DB: f32 = 5.;
-const PHASE_DEVIATION_DB: f32 = PI / 4.;
+pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;
+pub const PHASE_DEVIATION_DB: f32 = PI / 4.;
 
 pub type Cplx = Complex<f32>;
 
@@ -30,20 +30,20 @@ pub const SAMPLE_RATE:     usize = 44100;
 pub const NUM_POINTS:      usize = 8192;
 pub const BASE_FREQUENCY:  f32 = (SAMPLE_RATE as f32) / (NUM_POINTS as f32);
 
-fn to_decibel(input: f32) -> f32 {
+pub fn to_decibel(input: f32) -> f32 {
     20.0 * input.log10()
 }
 
-fn from_decibel(input: f32) -> f32 {
+pub fn from_decibel(input: f32) -> f32 {
     (10 as f32).powf(input / 20.0)
 }
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Detector {
-    freq:  f32, // base detector frequency
-    band:  f32, // frequency range
-    amp:   f32, // amplitude in dB
-    phase: f32, // phase
+    pub freq:  f32, // base detector frequency
+    pub band:  f32, // frequency range
+    pub amp:   f32, // amplitude in dB
+    pub phase: f32, // phase
 }
 
 impl Detector {
@@ -208,7 +208,7 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
     let lo = (freqs.0 / BASE_FREQUENCY).round() as usize;
     let hi = (freqs.1 / BASE_FREQUENCY).round() as usize;
 
-    let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS / 2);
+    let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
 
     for frame in reader
         .samples::<i16>()

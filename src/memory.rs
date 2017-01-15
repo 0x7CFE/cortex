@@ -6,6 +6,7 @@ use std::collections::Bound::{Included, Excluded, Unbounded};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering, max};
+use std::f32::consts::PI;
 
 use bit_vec::BitVec;
 
@@ -117,6 +118,7 @@ pub const SPECTRA_PER_FRAGMENT: usize = 2;
 
 /// `Fragment` represents several time slices
 /// of the spectrum within specified range.
+#[derive(Clone, Debug)]
 pub struct Fragment {
     /// Complete slice of DFT.
     spectra: Vec<Spectrum>,
@@ -138,7 +140,7 @@ impl Fragment {
         Fragment {
             spectra: spectra.iter()
                 .map(|s| {
-                    (&s[lower_index .. upper_index])
+                    (&s[lower_index .. upper_index + 1])
                         .iter()
                         .cloned()
                         .collect()
@@ -189,12 +191,54 @@ impl<'a> Dictionary<'a> {
         })))
     }
 
-    fn fragment_key(detectors: &[Detector], fragment: &Fragment) -> FragmentKey {
+    fn fragment_key(freq_range: (f32, f32), detectors: &[Detector], fragment: &Fragment) -> FragmentKey {
         let mut result = BitVec::new();
+        let base_index = (freq_range.0 / BASE_FREQUENCY).round() as usize;
 
         // FIXME Should filter by detectors within the dictionary's range
-        for spectre in fragment.spectra.iter() {
-            sound::filter_detectors_inplace(&spectre, detectors, &mut result);
+        for spectrum in fragment.spectra.iter() {
+            // Iterating through all detectors filtering out activity
+            for detector in detectors {
+                use sound::*;
+
+                if detector.freq < freq_range.0 || detector.freq > freq_range.1 {
+                    // Detector does not match frequency region of this dictionary
+                    continue;
+                }
+
+                let index = (detector.freq / BASE_FREQUENCY).round() as usize - base_index;
+
+                println!("[{}] detector freq {} ± {}, amp {} ± {} dB, phase {}",
+                    index,
+                    detector.freq,
+                    detector.band,
+                    detector.amp,
+                    AMPLITUDE_DEVIATION_DB,
+                    detector.phase
+                );
+
+                // Selecting the entry with the largest amplitude
+                let amplitude = (spectrum[index].norm() * 2.0) / NUM_POINTS as f32;
+                let phase = spectrum[index].arg();
+
+                // Treating detector as active if max amplitude lays within detector's selectivity range
+                let amp_match   = (to_decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
+
+                // + PI is required to compare positive and negative values
+                let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < PHASE_DEVIATION_DB;
+
+                let is_active   = amp_match && phase_match;
+                result.push(is_active);
+
+                println!("signal amplitude {} → {} dB, phase {}{}\n",
+                    amplitude,
+                    to_decibel(amplitude),
+                    phase,
+                    if is_active { ", **MATCH**" } else { "" }
+                );
+            }
+
+            //sound::filter_detectors_inplace(&spectre, detectors, &mut result);
         }
 
         FragmentKey::from_bitvec(result)
@@ -205,8 +249,8 @@ impl<'a> Dictionary<'a> {
     /// then fragments are merged together. If no suitable match was
     /// found, then new item is inserted as is.
     pub fn insert_fragment(&mut self, fragment: Fragment, similarity: usize) {
-
-        let mut pending_key   = Self::fragment_key(self.detectors, &fragment);
+        let freq_range = (self.lower_frequency, self.upper_frequency);
+        let mut pending_key   = Self::fragment_key(freq_range, self.detectors, &fragment);
         let mut pending_value = Box::new(fragment);
 
         // FIXME Should we treat is as NOOP if empty key is pending?
@@ -231,7 +275,7 @@ impl<'a> Dictionary<'a> {
                 {
                     // Best match is suitable for merge. Merging values
                     // and checking that the key wasn't changed during merge.
-                    pending_key = Self::merge(self.detectors, value, &pending_value);
+                    pending_key = Self::merge(freq_range, self.detectors, value, &pending_value);
 
                     // If key wasn't changed after merge then all is consistent
                     if *key == pending_key {
@@ -285,7 +329,7 @@ impl<'a> Dictionary<'a> {
         }
     }
 
-    fn merge(detectors: &[Detector], prototype: &mut Fragment, value: &Fragment) -> FragmentKey {
+    fn merge(freq_range: (f32, f32), detectors: &[Detector], prototype: &mut Fragment, value: &Fragment) -> FragmentKey {
         assert_eq!(prototype.spectra.len(), value.spectra.len());
 
         let dest_weight = prototype.merge_weight as f32 / (prototype.merge_weight + value.merge_weight) as f32;
@@ -307,7 +351,11 @@ impl<'a> Dictionary<'a> {
         prototype.merge_weight += value.merge_weight;
 
         // TODO Calculate during merge
-        Self::fragment_key(&detectors, &prototype)
+        Self::fragment_key(freq_range, &detectors, &prototype)
+    }
+
+    pub fn iter<'b>(&'b self) -> impl Iterator<Item=(&'b FragmentKey, &'b Box<Fragment>)> {
+        self.map.iter()
     }
 }
 

@@ -1,5 +1,6 @@
 
 #![feature(btree_range, collections_bound)]
+#![feature(conservative_impl_trait)]
 
 extern crate num_traits;
 extern crate num_complex;
@@ -67,7 +68,13 @@ fn main() {
         println!("detector[{:3}]\tfreq {:.2},\tband {:.2}", i, freq, band);
     }
 
-    let mask = sound::analyze_file(input_filename, &detectors);
+    let dictionary = sound::build_dictionary(input_filename, &detectors);
+
+    for (key, value) in dictionary.iter() {
+        println!("{:?} -> {:?}\n", key, value);
+    }
+
+    /*let mask = sound::analyze_file(input_filename, &detectors);
     println!("{} detectors, mask size {}", detectors.len(), mask.len());
 
     for (i, bit) in mask.iter().enumerate() {
@@ -87,5 +94,5 @@ fn main() {
 
     if let Some(output_filename) = options.value_of("output") {
         sound::generate_file(output_filename, &detectors, &mask);
-    }
+    }*/
 }
