@@ -1,14 +1,19 @@
 
 use num_complex::*;
 use num_traits::Float;
-use std::f32::consts::PI;
 
+use std::f32::consts::PI;
+use std::io::{Read};
 use dft;
-use dft::{Operation, Plan};
 
 pub use bit_vec::BitVec;
 
 use hound;
+use memory::*;
+
+use itertools::Itertools;
+
+use iter::{CollectChunks, CollectChunksExt};
 
 // TODO Move to the Detector as individual field
 const AMPLITUDE_DEVIATION_DB: f32 = 5.;
@@ -178,7 +183,7 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
         println!("*** Chunk {}", chunk);
         samples.resize(NUM_POINTS, Cplx::default());
 
-        let plan = Plan::new(Operation::Forward, NUM_POINTS);
+        let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
         dft::transform(&mut samples, &plan);
 
         filter_detectors_inplace(&samples[..NUM_POINTS/2 - 1], detectors, &mut result);
@@ -186,6 +191,50 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
     }
 
     result
+}
+
+pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictionary<'d> {
+    // 1. Read 2*n samples from the stream
+    // 2. Collect them into vector
+    // 3. Perform series of DST on it [0 .. n] .. [n .. 2*n]
+
+    let mut reader = hound::WavReader::open(filename).unwrap();
+
+    let freqs = (102.28, 156.12);
+    let mut dictionary = Dictionary::new(detectors, freqs.0, freqs.1);
+
+    // Each detector operates only in the fixed part of the spectrum
+    // Selecting potentially interesting spectrum slice to check
+    let lo = (freqs.0 / BASE_FREQUENCY).round() as usize;
+    let hi = (freqs.1 / BASE_FREQUENCY).round() as usize;
+
+    let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS / 2);
+
+    for frame in reader
+        .samples::<i16>()
+        .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
+        .collect_chunks::<Samples>(NUM_POINTS)
+    {
+        if frame.len() < NUM_POINTS/2 {
+            break;
+        }
+
+        let mut first:  Samples = frame[.. NUM_POINTS/2].iter().cloned().collect();
+        let mut second: Samples = frame[NUM_POINTS/2 ..].iter().cloned().collect();
+
+        first.resize(NUM_POINTS, Cplx::default());
+        second.resize(NUM_POINTS, Cplx::default());
+
+        dft::transform(&mut first,  &plan);
+        dft::transform(&mut second, &plan);
+
+        let spectra  = &[&first, &second];
+        let fragment = Fragment::from_spectra(spectra, lo, hi);
+
+        dictionary.insert_fragment(fragment, 80);
+    }
+
+    dictionary
 }
 
 pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {
@@ -249,7 +298,7 @@ pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {
         // Advance iterator to match cloned position
         mask_iter.nth(num_taken - 1);
 
-        let plan = Plan::new(Operation::Backward, NUM_POINTS);
+        let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
         dft::transform(&mut spectrum, &plan);
 
         let max_sample = spectrum.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;

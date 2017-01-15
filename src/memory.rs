@@ -9,7 +9,8 @@ use std::cmp::{Ord, Ordering, max};
 
 use bit_vec::BitVec;
 
-use sound::{Spectrum, Cplx, Detector};
+use sound; // {Spectrum, Cplx, Detector};
+use sound::*;
 
 /// Special wrapper over `BitVec` that optimizes the case when
 /// bit vector contains relatively small amount of set bits.
@@ -112,7 +113,7 @@ impl FragmentKey {
 }
 
 /// Amount of spectrum slices per single fragment
-pub const SPECTRA_PER_FRAGMENT: usize = 8;
+pub const SPECTRA_PER_FRAGMENT: usize = 2;
 
 /// `Fragment` represents several time slices
 /// of the spectrum within specified range.
@@ -125,19 +126,25 @@ pub struct Fragment {
     merge_weight: i32,
 }
 
-/// Internal container type used by `Dictionary`
-type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
-
-/// `Dictionary` holds fragments associated with bit vectors.
-pub struct Dictionary<'a> {
-    map: FragmentMap,
-    detectors: &'a [Detector]
-}
-
 impl Fragment {
     pub fn new() -> Fragment {
         Fragment {
             spectra: Vec::with_capacity(SPECTRA_PER_FRAGMENT),
+            merge_weight: 1,
+        }
+    }
+
+    pub fn from_spectra(spectra: &[&Spectrum], lower_index: usize, upper_index: usize) -> Fragment {
+        Fragment {
+            spectra: spectra.iter()
+                .map(|s| {
+                    (&s[lower_index .. upper_index])
+                        .iter()
+                        .cloned()
+                        .collect()
+                })
+                .collect(),
+
             merge_weight: 1,
         }
     }
@@ -149,24 +156,26 @@ impl Fragment {
     pub fn spectrum_mut(&mut self, slice_index: usize) -> &mut Spectrum {
         &mut self.spectra[slice_index]
     }
+}
 
-    pub fn key(&self, detectors: &[Detector]) -> FragmentKey {
-        let mut result = BitVec::new();
+/// Internal container type used by `Dictionary`
+type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
 
-        // FIXME Should filter by detectors within the dictionary's range
-        for spectre in self.spectra.iter() {
-            sound::filter_detectors_inplace(&spectre, detectors, &mut result);
-        }
-
-        FragmentKey::from_bitvec(result)
-    }
+/// `Dictionary` holds fragments associated with bit vectors.
+pub struct Dictionary<'a> {
+    map: FragmentMap,
+    detectors: &'a [Detector],
+    lower_frequency: f32,
+    upper_frequency: f32,
 }
 
 impl<'a> Dictionary<'a> {
-    pub fn new(detectors: &[Detector]) -> Dictionary {
+    pub fn new(detectors: &[Detector], lower_frequency: f32, upper_frequency: f32) -> Dictionary {
         Dictionary {
             map: FragmentMap::new(),
-            detectors: detectors
+            detectors: detectors,
+            lower_frequency: lower_frequency,
+            upper_frequency: upper_frequency,
         }
     }
 
@@ -180,13 +189,24 @@ impl<'a> Dictionary<'a> {
         })))
     }
 
+    fn fragment_key(detectors: &[Detector], fragment: &Fragment) -> FragmentKey {
+        let mut result = BitVec::new();
+
+        // FIXME Should filter by detectors within the dictionary's range
+        for spectre in fragment.spectra.iter() {
+            sound::filter_detectors_inplace(&spectre, detectors, &mut result);
+        }
+
+        FragmentKey::from_bitvec(result)
+    }
+
     /// Insert a fragment into the dictionary. If dictionary already
     /// contains fragment that is similar enough to the provided one
     /// then fragments are merged together. If no suitable match was
     /// found, then new item is inserted as is.
-    pub fn insert(&mut self, fragment: Fragment, similarity: usize) {
+    pub fn insert_fragment(&mut self, fragment: Fragment, similarity: usize) {
 
-        let mut pending_key = fragment.key(self.detectors);
+        let mut pending_key   = Self::fragment_key(self.detectors, &fragment);
         let mut pending_value = Box::new(fragment);
 
         // FIXME Should we treat is as NOOP if empty key is pending?
@@ -198,11 +218,15 @@ impl<'a> Dictionary<'a> {
 
         loop {
             let key_changed = {
+                // Amount of bits to match the requested similarity percent
+                let bit_threshold = (pending_key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
+
                 // Finding best entry to merge-in the new value
-                if let Some((key, value, matched_bits)) = self.map
+                // TODO Optimize the case when at least threshold bits_set
+                if let Some((key, value, _)) = self.map
                     .range_mut(Excluded(&lower_bound), Included(&pending_key))
                     .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
-                    .filter(|&(_, _, m)| m >= similarity)
+                    .filter(|&(_, _, m)| m >= bit_threshold)
                     .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
                 {
                     // Best match is suitable for merge. Merging values
@@ -246,10 +270,13 @@ impl<'a> Dictionary<'a> {
         // which, if represented by a number, is less than the key's number
         let lower_bound = Self::lower_bound(&key);
 
+        // Amount of bits to match the requested similarity percent
+        let bit_threshold = (key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
+
         if let Some((_, value, _)) = self.map
             .range(Excluded(&lower_bound), Included(&key))
             .map(|(k, v)| (k, v, k.0.fuzzy_eq(&key.0)))
-            .filter(|&(_, _, m)| m >= similarity)
+            .filter(|&(_, _, m)| m >= bit_threshold)
             .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
         {
             Some(value)
@@ -280,7 +307,7 @@ impl<'a> Dictionary<'a> {
         prototype.merge_weight += value.merge_weight;
 
         // TODO Calculate during merge
-        prototype.key(detectors)
+        Self::fragment_key(&detectors, &prototype)
     }
 }
 
@@ -387,5 +414,4 @@ mod sparse_bitvec {
             assert_eq!(v1.partial_cmp(&v2), Some(order), "{:?} vs {:?}", v1, v2);
         }
     }
-}
 }

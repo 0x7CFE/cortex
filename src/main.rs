@@ -8,10 +8,14 @@ extern crate dft;
 extern crate clap;
 extern crate hound;
 
+#[macro_use] extern crate itertools;
+
 use clap::{Arg, App};
 
 mod sound;
 mod memory;
+mod iter;
+
 use sound::Detector;
 
 use std::f32::consts::PI;
