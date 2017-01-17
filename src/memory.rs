@@ -136,7 +136,7 @@ impl FragmentKey {
 pub const SPECTRA_PER_FRAGMENT: usize = 2;
 
 /// `Fragment` represents several time slices
-/// of the spectrum within specified range.
+/// of the spectrum within predefined frequency range.
 #[derive(Clone, Debug)]
 pub struct Fragment {
     /// Complete slice of DFT.
@@ -155,16 +155,18 @@ impl Fragment {
         }
     }
 
-    pub fn from_spectra(spectra: &[&Spectrum], lower_index: usize, upper_index: usize) -> Fragment {
+    pub fn from_spectra(spectra: Vec<Spectrum> /*, lower_index: usize, upper_index: usize*/) -> Fragment {
         Fragment {
-            spectra: spectra.iter()
+            spectra: spectra,
+
+            /*spectra: spectra.iter()
                 .map(|s| {
                     (&s[lower_index .. upper_index + 1])
                         .iter()
                         .cloned()
                         .collect()
                 })
-                .collect(),
+                .collect(),*/
 
             merge_weight: 1,
         }

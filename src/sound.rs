@@ -200,7 +200,7 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 
     let mut reader = hound::WavReader::open(filename).unwrap();
 
-    let freqs = (102.28, 156.12);
+    let freqs = (102.28, 600. /*156.12*/);
     let mut dictionary = Dictionary::new(detectors, freqs.0, freqs.1);
 
     // Each detector operates only in the fixed part of the spectrum
@@ -228,10 +228,13 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
         dft::transform(&mut first,  &plan);
         dft::transform(&mut second, &plan);
 
-        let spectra  = &[&first, &second];
-        let fragment = Fragment::from_spectra(spectra, lo, hi);
+        let mut spectra = Vec::new();
+        spectra.push(first[lo .. hi + 1].iter().cloned().collect());
+        spectra.push(first[lo .. hi + 1].iter().cloned().collect());
 
-        dictionary.insert_fragment(fragment, 80);
+        let fragment = Fragment::from_spectra(spectra);
+
+        dictionary.insert_fragment(fragment, 95);
     }
 
     dictionary
