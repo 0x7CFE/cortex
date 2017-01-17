@@ -8,6 +8,9 @@ use std::cell::RefCell;
 use std::cmp::{Ord, Ordering, max};
 use std::f32::consts::PI;
 
+use std::fmt;
+use std::fmt::{Debug, Formatter};
+
 use bit_vec::BitVec;
 
 use sound; // {Spectrum, Cplx, Detector};
@@ -15,12 +18,28 @@ use sound::*;
 
 /// Special wrapper over `BitVec` that optimizes the case when
 /// bit vector contains relatively small amount of set bits.
-#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub struct SparseBitVec {
     leading_zeros: usize,
     trailing_zeros: usize,
     bits_set: usize,
     bits: BitVec,
+}
+
+impl Debug for SparseBitVec {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{} {} {} [",
+            self.leading_zeros,
+            self.trailing_zeros,
+            self.bits_set
+        )?;
+
+        for bit in self.bits.iter() {
+            write!(f, "{}", if bit { "!" } else { "." } )?;
+        }
+
+        write!(f, "]")
+    }
 }
 
 impl SparseBitVec {
