@@ -200,7 +200,8 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 
     let mut reader = hound::WavReader::open(filename).unwrap();
 
-    let freqs = (102.28, 600. /*156.12*/);
+    let freqs = (102.28, 156.12);
+    //let freqs = (900., 1100.);
     let mut dictionary = Dictionary::new(detectors, freqs.0, freqs.1);
 
     // Each detector operates only in the fixed part of the spectrum
@@ -210,33 +211,57 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
 
+    const SLICES_PER_FRAME: usize = 16;
+    const SLICE_OFFSET: usize = NUM_POINTS / SLICES_PER_FRAME;
+
+    println!("Building dictionary... ");
+    let mut frame_count = 0;
+
+    let mut spectra = Vec::new();
+
     for frame in reader
         .samples::<i16>()
         .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
         .collect_chunks::<Samples>(NUM_POINTS)
     {
-        if frame.len() < NUM_POINTS/2 {
+        if frame.len() < NUM_POINTS {
             break;
         }
 
-        let mut first:  Samples = frame[.. NUM_POINTS/2].iter().cloned().collect();
-        let mut second: Samples = frame[NUM_POINTS/2 ..].iter().cloned().collect();
+        spectra.clear();
 
-        first.resize(NUM_POINTS, Cplx::default());
-        second.resize(NUM_POINTS, Cplx::default());
+        // N spectra spanning the whole frame shifted in time
+        for slice in 0 .. 1 + SLICES_PER_FRAME / 2 {
+            let range = slice * SLICE_OFFSET .. slice * SLICE_OFFSET + NUM_POINTS/2;
 
-        dft::transform(&mut first,  &plan);
-        dft::transform(&mut second, &plan);
+            let mut slice: Spectrum = frame[range].iter().cloned().collect();
+            slice.resize(NUM_POINTS, Cplx::default());
 
-        let mut spectra = Vec::new();
-        spectra.push(first[lo .. hi + 1].iter().cloned().collect());
-        spectra.push(first[lo .. hi + 1].iter().cloned().collect());
+            dft::transform(&mut slice, &plan);
+            spectra.push(slice);
+        }
 
-        let fragment = Fragment::from_spectra(spectra);
+        // For each registered fragment (currently the only one)
+        {
+            let mut fragment_spectra = Vec::new();
 
-        dictionary.insert_fragment(fragment, 95);
+            // Spectrum slices for the particular fragment's frequency region
+            for spectrum in &spectra {
+                let slice: Spectrum = spectrum[lo .. hi + 1].iter().cloned().collect();
+                fragment_spectra.push(slice);
+            }
+
+            let fragment = Fragment::from_spectra(fragment_spectra);
+            dictionary.insert_fragment(fragment, 90);
+        }
+
+        frame_count += 1;
+        let dictionary_size = dictionary.len();
+
+        println!("\r{} frames processed, {} fragments classified", frame_count, dictionary_size);
     }
 
+    println!("\nCompleted.");
     dictionary
 }
 

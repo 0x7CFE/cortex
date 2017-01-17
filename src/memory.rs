@@ -193,6 +193,10 @@ pub struct Dictionary<'a> {
 }
 
 impl<'a> Dictionary<'a> {
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
     pub fn new(detectors: &[Detector], lower_frequency: f32, upper_frequency: f32) -> Dictionary {
         Dictionary {
             map: FragmentMap::new(),
@@ -229,14 +233,14 @@ impl<'a> Dictionary<'a> {
 
                 let index = (detector.freq / BASE_FREQUENCY).round() as usize - base_index;
 
-                println!("[{}] detector freq {} ± {}, amp {} ± {} dB, phase {}",
-                    index,
-                    detector.freq,
-                    detector.band,
-                    detector.amp,
-                    AMPLITUDE_DEVIATION_DB,
-                    detector.phase
-                );
+//                 println!("[{}] detector freq {} ± {}, amp {} ± {} dB, phase {}",
+//                     index,
+//                     detector.freq,
+//                     detector.band,
+//                     detector.amp,
+//                     AMPLITUDE_DEVIATION_DB,
+//                     detector.phase
+//                 );
 
                 // Selecting the entry with the largest amplitude
                 let amplitude = (spectrum[index].norm() * 2.0) / NUM_POINTS as f32;
@@ -251,12 +255,12 @@ impl<'a> Dictionary<'a> {
                 let is_active   = amp_match && phase_match;
                 result.push(is_active);
 
-                println!("signal amplitude {} → {} dB, phase {}{}\n",
-                    amplitude,
-                    to_decibel(amplitude),
-                    phase,
-                    if is_active { ", **MATCH**" } else { "" }
-                );
+//                 println!("signal amplitude {} → {} dB, phase {}{}\n",
+//                     amplitude,
+//                     to_decibel(amplitude),
+//                     phase,
+//                     if is_active { ", **MATCH**" } else { "" }
+//                 );
             }
 
             //sound::filter_detectors_inplace(&spectre, detectors, &mut result);
@@ -274,15 +278,22 @@ impl<'a> Dictionary<'a> {
         let mut pending_key   = Self::fragment_key(freq_range, self.detectors, &fragment);
         let mut pending_value = Box::new(fragment);
 
-        // FIXME Should we treat is as NOOP if empty key is pending?
-        assert!(pending_key.0.bits_set > 0);
+        // Empty key means that the value may not be selected later
+        if pending_key.0.bits_set == 0 {
+            return;
+        }
 
         // Lower bound is the least meaningful element of the dictionary
         // which, if represented by a number, is less than the key's number
         let mut lower_bound = Self::lower_bound(&pending_key);
 
+        enum KeyState {
+            NotChanged,
+            Changed(FragmentKey)
+        }
+
         loop {
-            let key_changed = {
+            let key_state = {
                 // Amount of bits to match the requested similarity percent
                 let bit_threshold = (pending_key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
 
@@ -305,18 +316,18 @@ impl<'a> Dictionary<'a> {
 
                     // Looks like key was changed after merge. We need to re-insert
                     // the merged value into the dictionary at the proper place
-                    true
+                    KeyState::Changed(key.clone())
                 } else {
                     // Not enough matched bits to merge or dictionary is still empty
-                    false
+                    KeyState::NotChanged
                 }
             };
 
             // If merge resulted in a changed key, then we need to reinsert
             // the value probably merging it again. Preparing for the next iteration.
-            if key_changed {
+            if let KeyState::Changed(old_key) = key_state {
                 // New key now stores key after merge
-                pending_value = self.map.remove(&pending_key).unwrap();
+                pending_value = self.map.remove(&old_key).unwrap();
 
                 // Recalculating lower bound if new key has more bits to the right
                 if pending_key.0.trailing_zeros < lower_bound.0.bits_set {

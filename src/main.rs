@@ -71,8 +71,11 @@ fn main() {
     let dictionary = sound::build_dictionary(input_filename, &detectors);
 
     for (key, value) in dictionary.iter() {
-        println!("{:?} -> {:?}\n", key, value);
+        //println!("{:?} -> {:?}\n", key, value);
+        println!("{:?}\n", key);
     }
+
+    println!("{} fragments total", dictionary.len());
 
     /*let mask = sound::analyze_file(input_filename, &detectors);
     println!("{} detectors, mask size {}", detectors.len(), mask.len());
