@@ -193,6 +193,11 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
     result
 }
 
+const SLICES_PER_FRAME:    usize = 32;
+const SLICE_OFFSET:        usize = NUM_POINTS / SLICES_PER_FRAME;
+const FRAGMENTS_PER_FRAME: usize = 4;
+const SLICES_PER_FRAGMENT: usize = (SLICES_PER_FRAME / FRAGMENTS_PER_FRAME) / 2;
+
 pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictionary<'d> {
     // 1. Read 2*n samples from the stream
     // 2. Collect them into vector
@@ -206,15 +211,11 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 
     // Each detector operates only in the fixed part of the spectrum
     // Selecting potentially interesting spectrum slice to check
-    let low = (freqs.0 / BASE_FREQUENCY).round() as usize;
+    let low  = (freqs.0 / BASE_FREQUENCY).round() as usize;
     let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
 
-    const SLICES_PER_FRAME:    usize = 32;
-    const SLICE_OFFSET:        usize = NUM_POINTS / SLICES_PER_FRAME;
-    const FRAGMENTS_PER_FRAME: usize = 4;
-    const SLICES_PER_FRAGMENT: usize = (SLICES_PER_FRAME / FRAGMENTS_PER_FRAME) / 2;
 
     println!("Building dictionary... ");
     let mut frame_count = 0;
@@ -255,7 +256,7 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
             }
 
             let fragment = Fragment::from_spectra(fragment_spectra);
-            dictionary.insert_fragment(fragment, 30);
+            dictionary.insert_fragment(fragment, 60);
         }
 
         frame_count += 1;
@@ -266,6 +267,62 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 
     println!("\nCompleted.");
     dictionary
+}
+
+pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
+    let wav_header = hound::WavSpec {
+        channels: 1,
+        sample_rate: SAMPLE_RATE as u32, //44100,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let mut writer = hound::WavWriter::create(filename, wav_header).unwrap();
+    let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
+
+    let freqs = (102.28, 156.12);
+    let low  = (freqs.0 / BASE_FREQUENCY).round() as usize;
+    let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
+
+    for (key, fragment) in dictionary.iter() {
+        println!("writing key {:?}\n", key);
+
+        for (index, mut spectrum) in fragment.spectra().iter()
+            .map(|slice| {
+                let mut spectrum = Vec::new();
+                spectrum.resize(low - 1, Cplx::default());
+                spectrum.extend_from_slice(slice);
+                spectrum.resize(NUM_POINTS, Cplx::default());
+
+                // [000000|slice|00000]
+                spectrum
+            })
+            .collect::<Vec<Spectrum>>()
+            .iter_mut()
+            .enumerate()
+        {
+            dft::transform(spectrum, &plan);
+
+            let max_sample = spectrum.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
+
+            let range = index * SLICE_OFFSET .. index * SLICE_OFFSET + NUM_POINTS/2;
+            for sample in &spectrum[range] {
+                let amplitude = (i16::max_value() - 1000) as f32;
+                writer.write_sample(((sample.re / max_sample) * (amplitude / 2.)) as i16).unwrap();
+            }
+
+            // writing 100 ms of silence between fragment slices
+            for _ in 1 .. SAMPLE_RATE / 10 {
+                writer.write_sample(0).unwrap();
+            }
+        }
+
+        // writing 1s of silence between fragments
+        for _ in 1 .. SAMPLE_RATE {
+            writer.write_sample(0).unwrap();
+        }
+    }
+
 }
 
 pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {

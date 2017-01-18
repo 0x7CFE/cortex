@@ -77,6 +77,11 @@ fn main() {
 
     println!("{} fragments total", dictionary.len());
 
+    if let Some(output_filename) = options.value_of("output") {
+        sound::dump_dictionary(output_filename, &dictionary);
+    }
+
+
     /*let mask = sound::analyze_file(input_filename, &detectors);
     println!("{} detectors, mask size {}", detectors.len(), mask.len());
 

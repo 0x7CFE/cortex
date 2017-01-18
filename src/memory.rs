@@ -179,6 +179,10 @@ impl Fragment {
     pub fn spectrum_mut(&mut self, slice_index: usize) -> &mut Spectrum {
         &mut self.spectra[slice_index]
     }
+
+    pub fn spectra(&self) -> &Vec<Spectrum> {
+        &self.spectra
+    }
 }
 
 /// Internal container type used by `Dictionary`
