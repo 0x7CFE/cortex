@@ -326,7 +326,7 @@ impl<'a> Dictionary<'a> {
             // If merge resulted in a changed key, then we need to reinsert
             // the value probably merging it again. Preparing for the next iteration.
             if let KeyState::Changed(old_key) = key_state {
-                // New key now stores key after merge
+                // Pending value will be re-inserted with a new pending key
                 pending_value = self.map.remove(&old_key).unwrap();
 
                 // Recalculating lower bound if new key has more bits to the right
@@ -342,6 +342,10 @@ impl<'a> Dictionary<'a> {
     }
 
     pub fn find(&self, key: &FragmentKey, similarity: usize) -> Option<&Fragment> {
+        if key.0.bits_set == 0 {
+            return None;
+        }
+
         // Lower bound is the least meaningful element of the dictionary
         // which, if represented by a number, is less than the key's number
         let lower_bound = Self::lower_bound(&key);
@@ -416,7 +420,7 @@ mod sparse_bitvec {
     }
 
     #[test] fn zeros() {
-        let plan = &[
+        let data = &[
             // mask          leading  trailing
             ([0b_1111_1111], 0,       0),
             ([0b_1000_0001], 0,       0),
@@ -428,7 +432,7 @@ mod sparse_bitvec {
             ([0b_0000_0000], 8,       8),
         ];
 
-        for &(mask, leading, trailing) in plan {
+        for &(mask, leading, trailing) in data {
             let vec = SparseBitVec::from_bytes(&mask);
 
             assert_eq!(vec.leading_zeros, leading);
@@ -437,7 +441,7 @@ mod sparse_bitvec {
     }
 
     #[test] fn set_bits() {
-        let plan = &[
+        let data = &[
             // mask         bits set
             ([0b_0000_0000], 0),
             ([0b_1111_1111], 8),
@@ -455,7 +459,7 @@ mod sparse_bitvec {
 
         ];
 
-        for &(mask, bits) in plan {
+        for &(mask, bits) in data {
             let vec = SparseBitVec::from_bytes(&mask);
 
             assert_eq!(vec.bits_set, bits);
@@ -463,7 +467,7 @@ mod sparse_bitvec {
     }
 
     #[test] fn cmp() {
-        let plan = &[
+        let data = &[
             // first vector  second vector   order
             ([0b_0000_0000], [0b_0000_0000], Ordering::Equal),
             ([0b_1111_1111], [0b_1111_1111], Ordering::Equal),
@@ -486,7 +490,7 @@ mod sparse_bitvec {
             ([0b_1010_1010], [0b_0101_0101], Ordering::Greater),
         ];
 
-        for &(b1, b2, order) in plan {
+        for &(b1, b2, order) in data {
             let v1 = SparseBitVec::from_bytes(&b1);
             let v2 = SparseBitVec::from_bytes(&b2);
 

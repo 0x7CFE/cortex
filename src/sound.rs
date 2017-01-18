@@ -206,13 +206,15 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 
     // Each detector operates only in the fixed part of the spectrum
     // Selecting potentially interesting spectrum slice to check
-    let lo = (freqs.0 / BASE_FREQUENCY).round() as usize;
-    let hi = (freqs.1 / BASE_FREQUENCY).round() as usize;
+    let low = (freqs.0 / BASE_FREQUENCY).round() as usize;
+    let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
 
-    const SLICES_PER_FRAME: usize = 16;
-    const SLICE_OFFSET: usize = NUM_POINTS / SLICES_PER_FRAME;
+    const SLICES_PER_FRAME:    usize = 32;
+    const SLICE_OFFSET:        usize = NUM_POINTS / SLICES_PER_FRAME;
+    const FRAGMENTS_PER_FRAME: usize = 4;
+    const SLICES_PER_FRAGMENT: usize = (SLICES_PER_FRAME / FRAGMENTS_PER_FRAME) / 2;
 
     println!("Building dictionary... ");
     let mut frame_count = 0;
@@ -231,28 +233,29 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
         spectra.clear();
 
         // N spectra spanning the whole frame shifted in time
-        for slice in 0 .. 1 + SLICES_PER_FRAME / 2 {
+        for slice in 0 .. SLICES_PER_FRAME / 2 {
             let range = slice * SLICE_OFFSET .. slice * SLICE_OFFSET + NUM_POINTS/2;
 
-            let mut slice: Spectrum = frame[range].iter().cloned().collect();
-            slice.resize(NUM_POINTS, Cplx::default());
+            let mut samples: Samples = frame[range].iter().cloned().collect();
+            samples.resize(NUM_POINTS, Cplx::default());
 
-            dft::transform(&mut slice, &plan);
-            spectra.push(slice);
+            dft::transform(&mut samples, &plan);
+            spectra.push(samples as Spectrum);
         }
 
         // For each registered fragment (currently the only one)
-        {
+        for fragment_index in 0 .. FRAGMENTS_PER_FRAME {
             let mut fragment_spectra = Vec::new();
 
             // Spectrum slices for the particular fragment's frequency region
-            for spectrum in &spectra {
-                let slice: Spectrum = spectrum[lo .. hi + 1].iter().cloned().collect();
+            let fragment_region = fragment_index*SLICES_PER_FRAGMENT .. (fragment_index + 1)*SLICES_PER_FRAGMENT;
+            for spectrum in &spectra[fragment_region] {
+                let slice: Spectrum = spectrum[low .. high + 1].iter().cloned().collect();
                 fragment_spectra.push(slice);
             }
 
             let fragment = Fragment::from_spectra(fragment_spectra);
-            dictionary.insert_fragment(fragment, 90);
+            dictionary.insert_fragment(fragment, 30);
         }
 
         frame_count += 1;
