@@ -15,6 +15,9 @@ use itertools::Itertools;
 
 use iter::{CollectChunks, CollectChunksExt};
 
+use sample::*;
+use sample::window::Type;
+
 // TODO Move to the Detector as individual field
 pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;
 pub const PHASE_DEVIATION_DB: f32 = PI / 4.;
@@ -193,20 +196,21 @@ pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
     result
 }
 
-const SLICES_PER_FRAME:    usize = 32;
-const SLICE_OFFSET:        usize = NUM_POINTS / SLICES_PER_FRAME;
+const SLICES_PER_FRAME:    usize = 16;
 const FRAGMENTS_PER_FRAME: usize = 4;
-const SLICES_PER_FRAGMENT: usize = (SLICES_PER_FRAME / FRAGMENTS_PER_FRAME) / 2;
+
+const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
+const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
+const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
 pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictionary<'d> {
     // 1. Read 2*n samples from the stream
     // 2. Collect them into vector
     // 3. Perform series of DST on it [0 .. n] .. [n .. 2*n]
 
-    let mut reader = hound::WavReader::open(filename).unwrap();
+    let freqs = FRAGMENT_WINDOW;
 
-    let freqs = (102.28, 156.12);
-    //let freqs = (900., 1100.);
+    let mut reader = hound::WavReader::open(filename).unwrap();
     let mut dictionary = Dictionary::new(detectors, freqs.0, freqs.1);
 
     // Each detector operates only in the fixed part of the spectrum
@@ -220,7 +224,7 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
     println!("Building dictionary... ");
     let mut frame_count = 0;
 
-    let mut spectra = Vec::new();
+    let mut spectra = Vec::with_capacity(SLICES_PER_FRAME);
 
     for frame in reader
         .samples::<i16>()
@@ -234,29 +238,33 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
         spectra.clear();
 
         // N spectra spanning the whole frame shifted in time
-        for slice in 0 .. SLICES_PER_FRAME / 2 {
-            let range = slice * SLICE_OFFSET .. slice * SLICE_OFFSET + NUM_POINTS/2;
+        for slice in 0 .. SLICES_PER_FRAME {
+            let range = slice * SLICE_OFFSET .. slice * SLICE_OFFSET + NUM_POINTS / 2;
 
+            // Collecting samples and zero padding to the frame length
             let mut samples: Samples = frame[range].iter().cloned().collect();
             samples.resize(NUM_POINTS, Cplx::default());
 
+            // Performing FFT
             dft::transform(&mut samples, &plan);
             spectra.push(samples as Spectrum);
         }
 
-        // For each registered fragment (currently the only one)
+        // For each registered window (currently the only one)
         for fragment_index in 0 .. FRAGMENTS_PER_FRAME {
-            let mut fragment_spectra = Vec::new();
+            let mut fragment_spectra = Vec::with_capacity(high - low);
 
-            // Spectrum slices for the particular fragment's frequency region
+            // We split the whole frame into several independent fragments each
+            // having it's part of the time slice and own place in the dictionary
             let fragment_region = fragment_index*SLICES_PER_FRAGMENT .. (fragment_index + 1)*SLICES_PER_FRAGMENT;
             for spectrum in &spectra[fragment_region] {
+                // Spectrum slices for the particular fragment's frequency region
                 let slice: Spectrum = spectrum[low .. high + 1].iter().cloned().collect();
                 fragment_spectra.push(slice);
             }
 
             let fragment = Fragment::from_spectra(fragment_spectra);
-            dictionary.insert_fragment(fragment, 60);
+            dictionary.insert_fragment(fragment, 80);
         }
 
         frame_count += 1;
@@ -272,7 +280,7 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
     let wav_header = hound::WavSpec {
         channels: 1,
-        sample_rate: SAMPLE_RATE as u32, //44100,
+        sample_rate: SAMPLE_RATE as u32,
         bits_per_sample: 16,
         sample_format: hound::SampleFormat::Int,
     };
@@ -280,44 +288,74 @@ pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
     let mut writer = hound::WavWriter::create(filename, wav_header).unwrap();
     let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
 
-    let freqs = (102.28, 156.12);
+    let freqs = FRAGMENT_WINDOW;
     let low  = (freqs.0 / BASE_FREQUENCY).round() as usize;
     let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
 
     for (key, fragment) in dictionary.iter() {
         println!("writing key {:?}\n", key);
 
-        for (index, mut spectrum) in fragment.spectra().iter()
+        // Accumulated output mixed from all time slices
+        let mut output = Vec::with_capacity(NUM_POINTS);
+        output.resize(NUM_POINTS, Cplx::default());
+
+        for (slice_index, samples) in fragment.spectra().iter()
             .map(|slice| {
-                let mut spectrum = Vec::new();
+                let mut spectrum = Vec::with_capacity(NUM_POINTS);
+
+                // Preparing the full spectrum from it's fragment
+                // by extending it with zeroes before and after
                 spectrum.resize(low - 1, Cplx::default());
                 spectrum.extend_from_slice(slice);
                 spectrum.resize(NUM_POINTS, Cplx::default());
 
-                // [000000|slice|00000]
-                spectrum
+                // Performing IDFT
+                dft::transform(&mut spectrum, &plan);
+
+                // Applying Hanning window to the time domain values
+                let normalized_length = 1. / (NUM_POINTS as f32 / 2.);
+                for (sample_index, sample) in spectrum.iter_mut().take(NUM_POINTS / 2).enumerate() {
+                    let phase: f32 = Sample::from_sample(sample_index as f32 * normalized_length);
+                    let value: f32 = window::Hanning::at_phase(phase);
+
+                    *sample = *sample * (value / 2.);
+                }
+
+                spectrum as Samples
             })
-            .collect::<Vec<Spectrum>>()
-            .iter_mut()
+            .collect::<Vec<Samples>>()
+            .iter()
             .enumerate()
         {
-            dft::transform(spectrum, &plan);
-
-            let max_sample = spectrum.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
-
-            let range = index * SLICE_OFFSET .. index * SLICE_OFFSET + NUM_POINTS/2;
-            for sample in &spectrum[range] {
-                let amplitude = (i16::max_value() - 1000) as f32;
-                writer.write_sample(((sample.re / max_sample) * (amplitude / 2.)) as i16).unwrap();
+            // Mixing with output from other time slices
+            let range = slice_index * SLICE_OFFSET .. slice_index * SLICE_OFFSET + NUM_POINTS / 2;
+            for (sample_index, sample) in output[range].iter_mut().enumerate() {
+                sample.re += samples[sample_index].re;
             }
 
-            // writing 100 ms of silence between fragment slices
-            for _ in 1 .. SAMPLE_RATE / 10 {
-                writer.write_sample(0).unwrap();
+            // Dumping individual spectrums
+            {
+                let max_sample = samples.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
+                for sample in &samples[.. NUM_POINTS / 2] {
+                    let amplitude = (i16::max_value() - 1000) as f32;
+                    writer.write_sample(((sample.re / max_sample) * amplitude * 0.75) as i16).unwrap();
+                }
+
+                // writing 100ms of silence between fragment slices
+                for _ in 1 .. SAMPLE_RATE / 10 {
+                    writer.write_sample(0).unwrap();
+                }
             }
         }
 
-        // writing 1s of silence between fragments
+        // Normalizing output
+        let max_sample = output.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
+        for sample in &output {
+            let amplitude = (i16::max_value() - 1000) as f32;
+            writer.write_sample(((sample.re / max_sample) * amplitude * 0.75) as i16).unwrap();
+        }
+
+        // Writing 1s silence between the fragments
         for _ in 1 .. SAMPLE_RATE {
             writer.write_sample(0).unwrap();
         }

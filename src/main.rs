@@ -8,6 +8,7 @@ extern crate bit_vec;
 extern crate dft;
 extern crate clap;
 extern crate hound;
+extern crate sample;
 
 #[macro_use] extern crate itertools;
 
