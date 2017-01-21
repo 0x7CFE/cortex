@@ -237,21 +237,19 @@ impl<'a> Dictionary<'a> {
 
                 let index = (detector.freq / BASE_FREQUENCY).round() as usize - base_index;
 
-//                 println!("[{}] detector freq {} ± {}, amp {} ± {} dB, phase {}",
-//                     index,
-//                     detector.freq,
-//                     detector.band,
-//                     detector.amp,
-//                     AMPLITUDE_DEVIATION_DB,
-//                     detector.phase
-//                 );
-
-                // Selecting the entry with the largest amplitude
                 let amplitude = (spectrum[index].norm() * 2.0) / NUM_POINTS as f32;
                 let phase = spectrum[index].arg();
 
+                let compress = |a| {
+                    if a > -60. && a < -15. {
+                        a + 10.
+                    } else {
+                        a
+                    }
+                };
+
                 // Treating detector as active if max amplitude lays within detector's selectivity range
-                let amp_match   = (to_decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
+                let amp_match   = (compress(to_decibel(amplitude)).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
 
                 // + PI is required to compare positive and negative values
                 let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < PHASE_DEVIATION_DB;
@@ -259,12 +257,23 @@ impl<'a> Dictionary<'a> {
                 let is_active   = amp_match && phase_match;
                 result.push(is_active);
 
-//                 println!("signal amplitude {} → {} dB, phase {}{}\n",
-//                     amplitude,
-//                     to_decibel(amplitude),
-//                     phase,
-//                     if is_active { ", **MATCH**" } else { "" }
-//                 );
+                if is_active {
+//                     println!("[{}] detector freq {} ± {}, amp {} ± {} dB, phase {}",
+//                         index,
+//                         detector.freq,
+//                         detector.band,
+//                         detector.amp,
+//                         AMPLITUDE_DEVIATION_DB,
+//                         detector.phase
+//                     );
+
+//                     println!("signal amplitude {} → {} dB, phase {}{}\n",
+//                         amplitude,
+//                         to_decibel(amplitude),
+//                         phase,
+//                         if is_active { ", **MATCH**" } else { "" }
+//                     );
+                }
             }
 
             //sound::filter_detectors_inplace(&spectre, detectors, &mut result);

@@ -71,12 +71,12 @@ fn main() {
 
     let dictionary = sound::build_dictionary(input_filename, &detectors);
 
-    for (key, value) in dictionary.iter() {
-        //println!("{:?} -> {:?}\n", key, value);
-        println!("{:?}\n", key);
-    }
+//     for (key, value) in dictionary.iter() {
+//         //println!("{:?} -> {:?}\n", key, value);
+//         println!("{:?}\n", key);
+//     }
 
-    println!("{} fragments total", dictionary.len());
+//     println!("{} fragments total", dictionary.len());
 
     if let Some(output_filename) = options.value_of("output") {
         sound::dump_dictionary(output_filename, &dictionary);

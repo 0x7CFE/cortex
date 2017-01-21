@@ -239,10 +239,11 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 
         // N spectra spanning the whole frame shifted in time
         for slice in 0 .. SLICES_PER_FRAME {
+            // Collecting samples
             let range = slice * SLICE_OFFSET .. slice * SLICE_OFFSET + NUM_POINTS / 2;
-
-            // Collecting samples and zero padding to the frame length
             let mut samples: Samples = frame[range].iter().cloned().collect();
+
+            // Zero padding to the frame length
             samples.resize(NUM_POINTS, Cplx::default());
 
             // Performing FFT
@@ -270,7 +271,7 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
         frame_count += 1;
         let dictionary_size = dictionary.len();
 
-        println!("\r{} frames processed, {} fragments classified", frame_count, dictionary_size);
+        print!("\r{} frames processed, {} fragments classified", frame_count, dictionary_size);
     }
 
     println!("\nCompleted.");
@@ -278,6 +279,8 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 }
 
 pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
+    println!("Dumping dictionary... ");
+
     let wav_header = hound::WavSpec {
         channels: 1,
         sample_rate: SAMPLE_RATE as u32,
@@ -293,7 +296,7 @@ pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
     let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
 
     for (key, fragment) in dictionary.iter() {
-        println!("writing key {:?}\n", key);
+//         println!("writing key {:?}\n", key);
 
         // Accumulated output mixed from all time slices
         let mut output = Vec::with_capacity(NUM_POINTS);
@@ -361,6 +364,7 @@ pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
         }
     }
 
+    println!("\nCompleted.");
 }
 
 pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {
