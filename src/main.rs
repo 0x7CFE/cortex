@@ -71,6 +71,8 @@ fn main() {
 
     let (glossary, keys) = sound::build_glossary(input_filename, &detectors);
 
+
+
 //     for (key, value) in dictionary.iter() {
 //         //println!("{:?} -> {:?}\n", key, value);
 //         println!("{:?}\n", key);
@@ -79,10 +81,12 @@ fn main() {
 //     println!("{} fragments total", dictionary.len());
 
     if let Some(output_prefix) = options.value_of("output") {
-        for (index, dictionary) in glossary.iter().enumerate() {
-            let output_filename = format!("{}.{}.wav", output_prefix, index);
-            sound::dump_dictionary(&output_filename, &dictionary);
-        }
+        sound::reconstruct(output_prefix, &glossary, &keys);
+
+//         for (index, dictionary) in glossary.iter().enumerate() {
+//             let output_filename = format!("{}.{}.wav", output_prefix, index);
+//             sound::dump_dictionary(&output_filename, &dictionary);
+//         }
     }
 
 

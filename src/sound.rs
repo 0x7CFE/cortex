@@ -283,7 +283,7 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
 }
 
 pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
-    print!("Reconstructing {} from key vector of {} elements", filename, keys.len());
+    println!("Reconstructing {} from key vector of {} elements", filename, keys.len());
 
     let wav_header = hound::WavSpec {
         channels: 1,
@@ -298,13 +298,14 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
     let mut output = Vec::with_capacity(NUM_POINTS);
 
     let mut spectra = Vec::new();
-    spectra.resize(SLICES_PER_FRAGMENT, Spectrum::with_capacity(NUM_POINTS));
+    spectra.resize(SLICES_PER_FRAME, Spectrum::with_capacity(NUM_POINTS));
 
     let mut key_iter = keys.iter();
 
-    loop {
-        // Clearing from the previuos iteration
+    for frame_index in 0 .. {
+        println!("Reconstructing frame {}", frame_index);
 
+        // Clearing from the previuos iteration
         output.clear();
         output.resize(NUM_POINTS, Cplx::default());
 
@@ -336,7 +337,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
                 };
 
                 // Writing sub spectrum into it's place in the frame's spectra
-                if let Some(fragment) = dictionary.find(fragment_key, 50) {
+                if let Some(fragment) = dictionary.find(fragment_key, 80) {
                     for (sub_index, sub_spectrum) in fragment.spectra().iter().enumerate() {
                         for (index, value) in sub_spectrum.iter().enumerate() {
                             spectra[fragment_index*SLICES_PER_FRAGMENT + sub_index][low + index] = *value;
@@ -377,6 +378,8 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
         }
 
     }
+
+    println!("done.");
 }
 
 pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
