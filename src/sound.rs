@@ -203,6 +203,79 @@ const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
 const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
+pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> Glossary<'d> {
+    // (100, 199), (200, 299), ... (1900, 1999)
+    let regions: Vec<_> = (1 .. 13).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
+    let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
+
+    let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
+    let mut reader = hound::WavReader::open(filename).unwrap();
+    let mut spectra = Vec::with_capacity(SLICES_PER_FRAME);
+
+    println!("Building glossary... ");
+    let mut frame_count = 0;
+
+    for frame in reader
+        .samples::<i16>()
+        .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
+        .collect_chunks::<Samples>(NUM_POINTS)
+    {
+        if frame.len() < NUM_POINTS {
+            break;
+        }
+
+        spectra.clear();
+
+        // N spectrums spanning the whole frame shifted in time
+        for slice in 0 .. SLICES_PER_FRAME {
+            // Collecting samples
+            let range = slice * SLICE_OFFSET .. slice * SLICE_OFFSET + NUM_POINTS / 2;
+            let mut samples: Samples = frame[range].iter().cloned().collect();
+
+            // Zero padding to the frame length
+            samples.resize(NUM_POINTS, Cplx::default());
+
+            // Performing FFT
+            dft::transform(&mut samples, &plan);
+            spectra.push(samples as Spectrum);
+        }
+
+        // For each registered dictionary
+        for (index, dictionary) in dictionaries.iter_mut().enumerate() {
+            // Each dictionary operates only in the fixed part of the spectrum
+            // Selecting potentially interesting spectrum slice to check
+            let frequencies = dictionary.get_bounds();
+            let low  = (frequencies.0 / BASE_FREQUENCY).round() as usize;
+            let high = (frequencies.1 / BASE_FREQUENCY).round() as usize;
+
+            for fragment_index in 0 .. FRAGMENTS_PER_FRAME {
+                let mut fragment_spectra = Vec::with_capacity(high - low);
+
+                // We split the whole frame into several independent fragments each
+                // having it's part of the time slice and own place in the dictionary
+                let fragment_region = fragment_index*SLICES_PER_FRAGMENT .. (fragment_index + 1)*SLICES_PER_FRAGMENT;
+                for spectrum in &spectra[fragment_region] {
+                    // Spectrum slices for the particular fragment's frequency region
+                    let slice: Spectrum = spectrum[low .. high + 1].iter().cloned().collect();
+                    fragment_spectra.push(slice);
+                }
+
+                let fragment = Fragment::from_spectra(fragment_spectra);
+                dictionary.insert_fragment(fragment, 80);
+            }
+
+            println!("frame {}, dictionary {}, fragments classified {}", frame_count, index, dictionary.len());
+        }
+
+        println!("processed frame {}\n", frame_count);
+        frame_count += 1;
+    }
+
+    println!("\nCompleted.");
+
+    Glossary::from_dictionaries(detectors, dictionaries)
+}
+
 pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictionary<'d> {
     // 1. Read 2*n samples from the stream
     // 2. Collect them into vector
@@ -279,7 +352,7 @@ pub fn build_dictionary<'d>(filename: &str, detectors: &'d [Detector]) -> Dictio
 }
 
 pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
-    println!("Dumping dictionary... ");
+    print!("Dumping dictionary {}... ", filename);
 
     let wav_header = hound::WavSpec {
         channels: 1,
@@ -291,7 +364,7 @@ pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
     let mut writer = hound::WavWriter::create(filename, wav_header).unwrap();
     let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
 
-    let freqs = FRAGMENT_WINDOW;
+    let freqs = dictionary.get_bounds(); //FRAGMENT_WINDOW;
     let low  = (freqs.0 / BASE_FREQUENCY).round() as usize;
     let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
 
@@ -364,7 +437,7 @@ pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
         }
     }
 
-    println!("\nCompleted.");
+    println!("done.");
 }
 
 pub fn generate_file(filename: &str, detectors: &[Detector], mask: &BitVec) {

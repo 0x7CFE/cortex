@@ -69,7 +69,7 @@ fn main() {
         println!("detector[{:3}]\tfreq {:.2},\tband {:.2}", i, freq, band);
     }
 
-    let dictionary = sound::build_dictionary(input_filename, &detectors);
+    let glossary = sound::build_glossary(input_filename, &detectors);
 
 //     for (key, value) in dictionary.iter() {
 //         //println!("{:?} -> {:?}\n", key, value);
@@ -78,8 +78,11 @@ fn main() {
 
 //     println!("{} fragments total", dictionary.len());
 
-    if let Some(output_filename) = options.value_of("output") {
-        sound::dump_dictionary(output_filename, &dictionary);
+    if let Some(output_prefix) = options.value_of("output") {
+        for (index, dictionary) in glossary.iter().enumerate() {
+            let output_filename = format!("{}.{}.wav", output_prefix, index);
+            sound::dump_dictionary(&output_filename, &dictionary);
+        }
     }
 
 

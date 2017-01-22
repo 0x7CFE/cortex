@@ -1,4 +1,6 @@
 
+use std::collections::HashMap;
+
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::collections::Bound::{Included, Excluded, Unbounded};
@@ -196,6 +198,38 @@ pub struct Dictionary<'a> {
     upper_frequency: f32,
 }
 
+pub struct Glossary<'a> {
+    detectors: &'a [Detector],
+    //dictionaries: HashMap<(f32, f32), Dictionary<'a>>,
+    dictionaries: Vec<Dictionary<'a>>,
+}
+
+impl<'a> Glossary<'a> {
+    pub fn new(detectors: &[Detector]) -> Glossary {
+        Glossary {
+            detectors: detectors,
+            //dictionaries: HashMap::new(),
+            dictionaries: Vec::new(),
+        }
+    }
+
+    pub fn from_dictionaries<'b>(detectors: &'b [Detector], dictionaries: Vec<Dictionary<'b>>) -> Glossary<'b> {
+        Glossary {
+            detectors: detectors,
+            dictionaries: dictionaries,
+        }
+    }
+
+    pub fn insert(&mut self, dictionary: Dictionary<'a>) {
+        //let bounds = dictionary.get_bounds();
+        self.dictionaries.push(dictionary);
+    }
+
+    pub fn iter(&'a self) -> impl Iterator<Item=&'a Dictionary<'a>> {
+        self.dictionaries.iter()
+    }
+}
+
 impl<'a> Dictionary<'a> {
     pub fn len(&self) -> usize {
         self.map.len()
@@ -208,6 +242,10 @@ impl<'a> Dictionary<'a> {
             lower_frequency: lower_frequency,
             upper_frequency: upper_frequency,
         }
+    }
+
+    pub fn get_bounds(&self) -> (f32, f32) {
+        (self.lower_frequency, self.upper_frequency)
     }
 
     pub fn lower_bound(key: &FragmentKey) -> FragmentKey {
