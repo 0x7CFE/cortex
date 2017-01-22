@@ -203,7 +203,9 @@ const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
 const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
-pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> Glossary<'d> {
+type KeyVec = Vec<Option<FragmentKey>>;
+
+pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossary<'d>, KeyVec) {
     // (100, 199), (200, 299), ... (1900, 1999)
     let regions: Vec<_> = (1 .. 13).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
     let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
@@ -214,6 +216,8 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> Glossary
 
     println!("Building glossary... ");
     let mut frame_count = 0;
+
+    let mut keys = KeyVec::new();
 
     for frame in reader
         .samples::<i16>()
@@ -261,7 +265,9 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> Glossary
                 }
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
-                dictionary.insert_fragment(fragment, 80);
+                let fragment_key = dictionary.insert_fragment(fragment, 80);
+
+                keys.push(fragment_key);
             }
 
             println!("frame {}, dictionary {}, fragments classified {}", frame_count, index, dictionary.len());
@@ -273,7 +279,104 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> Glossary
 
     println!("\nCompleted.");
 
-    Glossary::from_dictionaries(detectors, dictionaries)
+    (Glossary::from_dictionaries(detectors, dictionaries), keys)
+}
+
+pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
+    print!("Reconstructing {} from key vector of {} elements", filename, keys.len());
+
+    let wav_header = hound::WavSpec {
+        channels: 1,
+        sample_rate: SAMPLE_RATE as u32,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let mut writer = hound::WavWriter::create(filename, wav_header).unwrap();
+
+    let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
+    let mut output = Vec::with_capacity(NUM_POINTS);
+
+    let mut spectra = Vec::new();
+    spectra.resize(SLICES_PER_FRAGMENT, Spectrum::with_capacity(NUM_POINTS));
+
+    let mut key_iter = keys.iter();
+
+    loop {
+        // Clearing from the previuos iteration
+
+        output.clear();
+        output.resize(NUM_POINTS, Cplx::default());
+
+        for spectrum in spectra.iter_mut() {
+            spectrum.clear();
+            spectrum.resize(NUM_POINTS, Cplx::default());
+        }
+
+        // For each registered dictionary
+        for (index, dictionary) in glossary.iter().enumerate() {
+            // Each dictionary operates only in the fixed part of the spectrum
+            // Selecting potentially interesting spectrum slice to check
+            let frequencies = dictionary.get_bounds();
+            let low  = (frequencies.0 / BASE_FREQUENCY).round() as usize;
+            let high = (frequencies.1 / BASE_FREQUENCY).round() as usize;
+
+            for fragment_index in 0 .. FRAGMENTS_PER_FRAME {
+                let fragment_key = {
+                    match key_iter.next() {
+                        Some(option) => {
+                            match option {
+                                &Some(ref key) => key,
+                                &None => continue
+                            }
+                        },
+
+                        None => return
+                    }
+                };
+
+                // Writing sub spectrum into it's place in the frame's spectra
+                if let Some(fragment) = dictionary.find(fragment_key, 50) {
+                    for (sub_index, sub_spectrum) in fragment.spectra().iter().enumerate() {
+                        for (index, value) in sub_spectrum.iter().enumerate() {
+                            spectra[fragment_index*SLICES_PER_FRAGMENT + sub_index][low + index] = *value;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Performing IDFT on all spectrums of the frame
+        for (slice_index, spectrum) in spectra.iter_mut().enumerate() {
+            // Performing IFFT
+            dft::transform(spectrum, &plan);
+
+            // Applying Hanning window to the time domain values
+            let normalized_length = 1. / (NUM_POINTS as f32 / 2.);
+            for (sample_index, sample) in spectrum.iter_mut().take(NUM_POINTS / 2).enumerate() {
+                let phase: f32 = Sample::from_sample(sample_index as f32 * normalized_length);
+                let value: f32 = window::Hanning::at_phase(phase);
+
+                *sample = *sample * (value / 2.);
+            }
+
+            // Mixing with output from other time slices
+            let range = slice_index * SLICE_OFFSET .. slice_index * SLICE_OFFSET + NUM_POINTS / 2;
+            for (sample_index, sample) in output[range].iter_mut().enumerate() {
+                sample.re += spectrum[sample_index].re;
+            }
+        }
+
+        // Normalizing output
+        let max_sample = output.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
+
+        // Writing output to file
+        for sample in &output {
+            let amplitude = (i16::max_value() - 1000) as f32;
+            writer.write_sample(((sample.re / max_sample) * amplitude * 0.75) as i16).unwrap();
+        }
+
+    }
 }
 
 pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
@@ -351,6 +454,8 @@ pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
 
         // Normalizing output
         let max_sample = output.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
+
+        // Writing output to file
         for sample in &output {
             let amplitude = (i16::max_value() - 1000) as f32;
             writer.write_sample(((sample.re / max_sample) * amplitude * 0.75) as i16).unwrap();

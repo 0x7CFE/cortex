@@ -324,14 +324,14 @@ impl<'a> Dictionary<'a> {
     /// contains fragment that is similar enough to the provided one
     /// then fragments are merged together. If no suitable match was
     /// found, then new item is inserted as is.
-    pub fn insert_fragment(&mut self, fragment: Fragment, similarity: usize) {
+    pub fn insert_fragment(&mut self, fragment: Fragment, similarity: usize) -> Option<FragmentKey> {
         let freq_range = (self.lower_frequency, self.upper_frequency);
         let mut pending_key   = Self::fragment_key(freq_range, self.detectors, &fragment);
         let mut pending_value = Box::new(fragment);
 
         // Empty key means that the value may not be selected later
         if pending_key.0.bits_set == 0 {
-            return;
+            return None;
         }
 
         // Lower bound is the least meaningful element of the dictionary
@@ -362,7 +362,7 @@ impl<'a> Dictionary<'a> {
 
                     // If key wasn't changed after merge then all is consistent
                     if *key == pending_key {
-                        return;
+                        return Some(key.clone());
                     }
 
                     // Looks like key was changed after merge. We need to re-insert
@@ -386,8 +386,9 @@ impl<'a> Dictionary<'a> {
                 }
             } else {
                 // No suitable match was found, inserting fragment as the new prototype
+                let key = pending_key.clone();
                 self.map.insert(pending_key, pending_value);
-                return;
+                return Some(key);
             }
         }
     }
