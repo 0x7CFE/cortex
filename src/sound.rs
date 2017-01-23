@@ -296,6 +296,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
 
     let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
     let mut output = Vec::with_capacity(NUM_POINTS);
+    let mut max_sample = 0.;
 
     let mut spectra = Vec::new();
     spectra.resize(SLICES_PER_FRAME, Spectrum::with_capacity(NUM_POINTS));
@@ -369,7 +370,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
         }
 
         // Normalizing output
-        let max_sample = output.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re;
+        max_sample = max_sample.max(output.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re);
 
         // Writing output to file
         for sample in &output {
