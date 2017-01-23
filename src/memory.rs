@@ -132,6 +132,10 @@ impl FragmentKey {
     pub fn from_bitvec(bits: BitVec) -> FragmentKey {
         FragmentKey(SparseBitVec::from_bitvec(bits))
     }
+
+    pub fn bits(&self) -> &BitVec {
+        self.0.bits()
+    }
 }
 
 /// Amount of spectrum slices per single fragment
@@ -279,7 +283,7 @@ impl<'a> Dictionary<'a> {
                 let phase = spectrum[index].arg();
 
                 let compress = |a| {
-                    if a > -60. && a < -15. {
+                    if a > -50. && a < -15. {
                         a + 10.
                     } else {
                         a

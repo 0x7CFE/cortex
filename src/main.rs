@@ -71,7 +71,17 @@ fn main() {
 
     let (glossary, keys) = sound::build_glossary(input_filename, &detectors);
 
+    let sum: usize = keys
+        .iter()
+        .map(|opt|
+            match opt {
+                &Some(ref key) => key.bits().iter().map(|b| b as usize).sum(),
+                &None => 0,
+            }
+        )
+        .sum();
 
+    println!("total key length {}", sum);
 
 //     for (key, value) in dictionary.iter() {
 //         //println!("{:?} -> {:?}\n", key, value);

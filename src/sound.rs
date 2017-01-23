@@ -2,6 +2,7 @@
 use num_complex::*;
 use num_traits::Float;
 
+use std::rc::Rc;
 use std::f32::consts::PI;
 use std::io::{Read};
 use dft;
@@ -203,13 +204,13 @@ const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
 const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
-const SIMILARITY: usize = 80;
+const SIMILARITY: usize = 60;
 
 type KeyVec = Vec<Option<FragmentKey>>;
 
 pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossary<'d>, KeyVec) {
     // (100, 199), (200, 299), ... (1900, 1999)
-    let regions: Vec<_> = (1 .. 13).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
+    let regions: Vec<_> = (1 .. 33).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
     let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
@@ -225,7 +226,8 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
         .samples::<i16>()
         .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
         .collect_chunks::<Samples>(NUM_POINTS / 2)
-        .tuple_windows() // FIXME eliminate cloning. Rc<Samples> maybe?
+        .map(|chunk| Rc::new(chunk)) // Wrap into Rc for cheap cloning
+        .tuple_windows()
     {
         if first.len() < NUM_POINTS / 2 || second.len() < NUM_POINTS / 2 {
             break;
