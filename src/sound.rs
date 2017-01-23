@@ -203,6 +203,8 @@ const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
 const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
+const SIMILARITY: usize = 80;
+
 type KeyVec = Vec<Option<FragmentKey>>;
 
 pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossary<'d>, KeyVec) {
@@ -219,24 +221,30 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
 
     let mut keys = KeyVec::new();
 
-    for frame in reader
+    for (first, second) in reader
         .samples::<i16>()
         .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
-        .collect_chunks::<Samples>(NUM_POINTS)
+        .collect_chunks::<Samples>(NUM_POINTS / 2)
+        .tuple_windows() // FIXME eliminate cloning. Rc<Samples> maybe?
     {
-        if frame.len() < NUM_POINTS {
+        if first.len() < NUM_POINTS / 2 || second.len() < NUM_POINTS / 2 {
             break;
         }
 
         spectra.clear();
 
-        // N spectrums spanning the whole frame shifted in time
+        // Collecting overlapping spectrums spanning the whole frame
         for slice in 0 .. SLICES_PER_FRAME {
             // Collecting samples
-            let range = slice * SLICE_OFFSET .. slice * SLICE_OFFSET + NUM_POINTS / 2;
-            let mut samples: Samples = frame[range].iter().cloned().collect();
+            let first_range  = slice * SLICE_OFFSET ..;
+            let second_range = .. slice * SLICE_OFFSET;
 
-            // Zero padding to the frame length
+            let mut samples: Samples = first[first_range].iter()
+                .chain(second[second_range].iter())
+                .cloned()
+                .collect();
+
+            // Zero padding to the full frame length
             samples.resize(NUM_POINTS, Cplx::default());
 
             // Performing FFT
@@ -265,7 +273,7 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
                 }
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
-                let fragment_key = dictionary.insert_fragment(fragment, 80);
+                let fragment_key = dictionary.insert_fragment(fragment, SIMILARITY);
 
                 keys.push(fragment_key);
             }
@@ -295,8 +303,10 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
     let mut writer = hound::WavWriter::create(filename, wav_header).unwrap();
 
     let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
-    let mut output = Vec::with_capacity(NUM_POINTS);
     let mut max_sample = 0.;
+
+    let mut output = Vec::with_capacity(NUM_POINTS);
+    output.resize(NUM_POINTS, Cplx::default());
 
     let mut spectra = Vec::new();
     spectra.resize(SLICES_PER_FRAME, Spectrum::with_capacity(NUM_POINTS));
@@ -306,10 +316,11 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
     for frame_index in 0 .. {
         println!("Reconstructing frame {}", frame_index);
 
-        // Clearing from the previuos iteration
-        output.clear();
+        // Left shift of the output by the half
+        output = output.split_off(NUM_POINTS / 2);
         output.resize(NUM_POINTS, Cplx::default());
 
+        // Clearing from the previuos iteration
         for spectrum in spectra.iter_mut() {
             spectrum.clear();
             spectrum.resize(NUM_POINTS, Cplx::default());
@@ -338,7 +349,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
                 };
 
                 // Writing sub spectrum into it's place in the frame's spectra
-                if let Some(fragment) = dictionary.find(fragment_key, 80) {
+                if let Some(fragment) = dictionary.find(fragment_key, SIMILARITY) {
                     for (sub_index, sub_spectrum) in fragment.spectra().iter().enumerate() {
                         for (index, value) in sub_spectrum.iter().enumerate() {
                             spectra[fragment_index*SLICES_PER_FRAGMENT + sub_index][low + index] = *value;
@@ -373,7 +384,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
         max_sample = max_sample.max(output.iter().max_by(|&x, &y| float_cmp(x.re, y.re, 0.00001)).unwrap().re);
 
         // Writing output to file
-        for sample in &output {
+        for sample in &output[ .. NUM_POINTS / 2] {
             let amplitude = (i16::max_value() - 1000) as f32;
             writer.write_sample(((sample.re / max_sample) * amplitude * 0.75) as i16).unwrap();
         }
