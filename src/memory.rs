@@ -354,7 +354,7 @@ impl<'a> Dictionary<'a> {
                 // Finding best entry to merge-in the new value
                 // TODO Optimize the case when at least threshold bits_set
                 if let Some((key, value, _)) = self.map
-                    .range_mut(Excluded(&lower_bound), Included(&pending_key))
+                    .range_mut((Excluded(&lower_bound), Included(&pending_key)))
                     .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
                     .filter(|&(_, _, m)| m >= bit_threshold)
                     .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
@@ -409,7 +409,7 @@ impl<'a> Dictionary<'a> {
         let bit_threshold = (key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
 
         if let Some((_, value, _)) = self.map
-            .range(Excluded(&lower_bound), Included(&key))
+            .range((Excluded(&lower_bound), Included(key)))
             .map(|(k, v)| (k, v, k.0.fuzzy_eq(&key.0)))
             .filter(|&(_, _, m)| m >= bit_threshold)
             .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
