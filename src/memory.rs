@@ -134,12 +134,9 @@ impl FragmentKey {
     }
 
     pub fn bits(&self) -> &BitVec {
-        self.0.bits()
+        &self.0.bits()
     }
 }
-
-/// Amount of spectrum slices per single fragment
-pub const SPECTRA_PER_FRAGMENT: usize = 2;
 
 /// `Fragment` represents several time slices
 /// of the spectrum within predefined frequency range.
@@ -150,13 +147,15 @@ pub struct Fragment {
 
     /// Weight of fragment as prototype.
     /// Used during merge process.
-    merge_weight: i32,
+    merge_weight: usize,
+
+    // TODO use_count: Cell<usize>,
 }
 
 impl Fragment {
     pub fn new() -> Fragment {
         Fragment {
-            spectra: Vec::with_capacity(SPECTRA_PER_FRAGMENT),
+            spectra: Vec::new(),
             merge_weight: 1,
         }
     }

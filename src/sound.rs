@@ -50,6 +50,13 @@ pub struct Detector {
     pub phase: f32, // phase
 }
 
+pub fn detector_freq(index: usize) -> f32 {
+    let ideal_freq = 15. + 5. * index as f32 + ((index as f32 - 5.) / 16.).exp();
+    let fft_freq = (ideal_freq / BASE_FREQUENCY).trunc() * BASE_FREQUENCY;
+
+    fft_freq
+}
+
 impl Detector {
     pub fn new(freq: f32, band: f32, amp: f32, phase: f32) -> Detector {
         Detector {
@@ -204,14 +211,19 @@ const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
 const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
-const SIMILARITY: usize = 60;
+const SIMILARITY: usize = 40;
 
 type KeyVec = Vec<Option<FragmentKey>>;
 
 pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossary<'d>, KeyVec) {
     // (100, 199), (200, 299), ... (1900, 1999)
-    let regions: Vec<_> = (1 .. 33).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
-    let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
+    //let regions: Vec<_> = (1 .. 33).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
+    //let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
+
+    let mut dictionaries: Vec<_> = (1 .. 14).into_iter()
+        .map(|i| (detector_freq(i*10), detector_freq((i+1)*10)) )
+        .map(|(low, high)| Dictionary::new(detectors, low, high))
+        .collect();
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
     let mut reader = hound::WavReader::open(filename).unwrap();
@@ -305,7 +317,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
     let mut writer = hound::WavWriter::create(filename, wav_header).unwrap();
 
     let plan = dft::Plan::new(dft::Operation::Backward, NUM_POINTS);
-    let mut max_sample = 0.;
+    let mut max_sample = 0.6;
 
     let mut output = Vec::with_capacity(NUM_POINTS);
     output.resize(NUM_POINTS, Cplx::default());

@@ -22,13 +22,6 @@ use sound::Detector;
 
 use std::f32::consts::PI;
 
-fn detector_freq(index: usize) -> f32 {
-    let ideal_freq = 15. + 5. * index as f32 + ((index as f32 - 5.) / 16.).exp();
-    let fft_freq = (ideal_freq / sound::BASE_FREQUENCY).trunc() * sound::BASE_FREQUENCY;
-
-    fft_freq
-}
-
 fn main() {
     let options = App::new("Semantic sound processor")
         .version("0.1")
@@ -52,9 +45,9 @@ fn main() {
     let mut detectors = Vec::new();
 
     // Populating detectors from 0Hz to ~1KHz with ~2683Hz
-    for i in 1 .. 129 {
-        let freq = detector_freq(i);
-        let band = 2. * (detector_freq(i+1) - freq);
+    for i in 1 .. 151 {
+        let freq = sound::detector_freq(i);
+        let band = 2. * (sound::detector_freq(i+1) - freq);
 
 //         for phase in vec![ -PI, -3.*PI/4., -PI/2., -PI/4., 0., PI/4., PI/2., 3.*PI/4., PI]
         for phase in vec![ -PI, -PI/2., 0., PI/2., PI ]
@@ -71,7 +64,7 @@ fn main() {
 
     let (glossary, keys) = sound::build_glossary(input_filename, &detectors);
 
-    let sum: usize = keys
+    let entropy: usize = keys
         .iter()
         .map(|opt|
             match opt {
@@ -81,7 +74,7 @@ fn main() {
         )
         .sum();
 
-    println!("total key length {}", sum);
+    println!("key entropy {}", entropy);
 
 //     for (key, value) in dictionary.iter() {
 //         //println!("{:?} -> {:?}\n", key, value);
