@@ -222,7 +222,7 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
 
     let mut dictionaries: Vec<_> = (1 .. 14).into_iter()
         .map(|i| (detector_freq(i*10), detector_freq((i+1)*10)) )
-        .map(|(low, high)| Dictionary::new(detectors, low, high))
+        .map(|(low, high)| Dictionary::new(low, high))
         .collect();
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
@@ -287,7 +287,7 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
                 }
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
-                let fragment_key = dictionary.insert_fragment(fragment, SIMILARITY);
+                let fragment_key = dictionary.insert_fragment(fragment, detectors, SIMILARITY);
 
                 keys.push(fragment_key);
             }

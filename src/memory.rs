@@ -194,9 +194,8 @@ impl Fragment {
 type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
 
 /// `Dictionary` holds fragments associated with bit vectors.
-pub struct Dictionary<'a> {
+pub struct Dictionary {
     map: FragmentMap,
-    detectors: &'a [Detector],
     lower_frequency: f32,
     upper_frequency: f32,
 }
@@ -204,7 +203,7 @@ pub struct Dictionary<'a> {
 pub struct Glossary<'a> {
     detectors: &'a [Detector],
     //dictionaries: HashMap<(f32, f32), Dictionary<'a>>,
-    dictionaries: Vec<Dictionary<'a>>,
+    dictionaries: Vec<Dictionary>,
 }
 
 impl<'a> Glossary<'a> {
@@ -216,32 +215,31 @@ impl<'a> Glossary<'a> {
         }
     }
 
-    pub fn from_dictionaries<'b>(detectors: &'b [Detector], dictionaries: Vec<Dictionary<'b>>) -> Glossary<'b> {
+    pub fn from_dictionaries<'b>(detectors: &'b [Detector], dictionaries: Vec<Dictionary>) -> Glossary<'b> {
         Glossary {
             detectors: detectors,
             dictionaries: dictionaries,
         }
     }
 
-    pub fn insert(&mut self, dictionary: Dictionary<'a>) {
+    pub fn insert(&mut self, dictionary: Dictionary) {
         //let bounds = dictionary.get_bounds();
         self.dictionaries.push(dictionary);
     }
 
-    pub fn iter(&'a self) -> impl Iterator<Item=&'a Dictionary<'a>> {
+    pub fn iter(&'a self) -> impl Iterator<Item=&'a Dictionary> {
         self.dictionaries.iter()
     }
 }
 
-impl<'a> Dictionary<'a> {
+impl Dictionary {
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
-    pub fn new(detectors: &[Detector], lower_frequency: f32, upper_frequency: f32) -> Dictionary {
+    pub fn new(lower_frequency: f32, upper_frequency: f32) -> Dictionary {
         Dictionary {
             map: FragmentMap::new(),
-            detectors: detectors,
             lower_frequency: lower_frequency,
             upper_frequency: upper_frequency,
         }
@@ -327,9 +325,9 @@ impl<'a> Dictionary<'a> {
     /// contains fragment that is similar enough to the provided one
     /// then fragments are merged together. If no suitable match was
     /// found, then new item is inserted as is.
-    pub fn insert_fragment(&mut self, fragment: Fragment, similarity: usize) -> Option<FragmentKey> {
+    pub fn insert_fragment(&mut self, fragment: Fragment, detectors: &[Detector], similarity: usize) -> Option<FragmentKey> {
         let freq_range = (self.lower_frequency, self.upper_frequency);
-        let mut pending_key   = Self::fragment_key(freq_range, self.detectors, &fragment);
+        let mut pending_key   = Self::fragment_key(freq_range, detectors, &fragment);
         let mut pending_value = Box::new(fragment);
 
         // Empty key means that the value may not be selected later
@@ -361,7 +359,7 @@ impl<'a> Dictionary<'a> {
                 {
                     // Best match is suitable for merge. Merging values
                     // and checking that the key wasn't changed during merge.
-                    pending_key = Self::merge(freq_range, self.detectors, value, &pending_value);
+                    pending_key = Self::merge(freq_range, detectors, value, &pending_value);
 
                     // If key wasn't changed after merge then all is consistent
                     if *key == pending_key {
