@@ -11,6 +11,12 @@ extern crate hound;
 extern crate sample;
 
 #[macro_use] extern crate itertools;
+#[macro_use] extern crate serde_derive;
+extern crate serde;
+
+extern crate bincode;
+use bincode::SizeLimit;
+use bincode::serde::serialize_into;
 
 use clap::{Arg, App};
 
@@ -21,6 +27,7 @@ mod iter;
 use sound::Detector;
 
 use std::f32::consts::PI;
+use std::fs::File;
 
 fn main() {
     let options = App::new("Semantic sound processor")
@@ -92,6 +99,12 @@ fn main() {
 //         }
     }
 
+    println!("Dumping glossary file");
+    let mut glossary_file = File::create("glossary.db").unwrap();
+    serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
+
+    let mut key_file = File::create("key.db").unwrap();
+    serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
 
     /*let mask = sound::analyze_file(input_filename, &detectors);
     println!("{} detectors, mask size {}", detectors.len(), mask.len());

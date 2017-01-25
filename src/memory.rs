@@ -14,6 +14,7 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 
 use bit_vec::BitVec;
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
 
 use sound; // {Spectrum, Cplx, Detector};
 use sound::*;
@@ -26,6 +27,33 @@ pub struct SparseBitVec {
     trailing_zeros: usize,
     bits_set: usize,
     bits: BitVec,
+}
+
+impl Serialize for SparseBitVec {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+        where S: Serializer
+    {
+        // TODO This may be easily restored during deserialization
+        serializer.serialize_usize(self.leading_zeros)?;
+        serializer.serialize_usize(self.trailing_zeros)?;
+        serializer.serialize_usize(self.bits_set)?;
+
+        let mut state = serializer.serialize_seq(Some(self.bits.capacity() / 32))?;
+        for block in self.bits.blocks() {
+            serializer.serialize_seq_elt(&mut state, block)?;
+        }
+        serializer.serialize_seq_end(state)?;
+
+        Ok(())
+    }
+}
+
+impl Deserialize for SparseBitVec {
+    fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+        where D: Deserializer
+    {
+        Ok(SparseBitVec::new()) // TODO
+    }
 }
 
 impl Debug for SparseBitVec {
@@ -91,6 +119,8 @@ impl SparseBitVec {
 
     pub fn fuzzy_eq(&self, other: &Self) -> usize {
         // Iterating through the vectors counting similarities
+        // TODO Accept minimum similarity to speed up the merge
+
         let matched_bits = self
             .bits.blocks()
             .zip(other.bits.blocks())
@@ -121,7 +151,7 @@ impl Ord for SparseBitVec {
 
 /// Sparse bit vector acting as a key of a fragment.
 /// Type is used to differ fragment keys from other vectors.
-#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct FragmentKey(SparseBitVec);
 
 impl FragmentKey {
@@ -140,7 +170,7 @@ impl FragmentKey {
 
 /// `Fragment` represents several time slices
 /// of the spectrum within predefined frequency range.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Fragment {
     /// Complete slice of DFT.
     spectra: Vec<Spectrum>,
@@ -194,12 +224,14 @@ impl Fragment {
 type FragmentMap = BTreeMap<FragmentKey, Box<Fragment>>;
 
 /// `Dictionary` holds fragments associated with bit vectors.
+#[derive(Serialize, Deserialize)]
 pub struct Dictionary {
     map: FragmentMap,
     lower_frequency: f32,
     upper_frequency: f32,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Glossary {
     detectors: Vec<Detector>,
     dictionaries: Vec<Dictionary>,
@@ -327,7 +359,7 @@ impl Dictionary {
 
         enum KeyState {
             NotChanged,
-            Changed(FragmentKey)
+            Changed(FragmentKey) // yields old key
         }
 
         loop {

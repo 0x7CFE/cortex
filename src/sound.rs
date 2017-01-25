@@ -42,7 +42,7 @@ pub fn from_decibel(input: f32) -> f32 {
     (10 as f32).powf(input / 20.0)
 }
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Detector {
     pub freq:  f32, // base detector frequency
     pub band:  f32, // frequency range
