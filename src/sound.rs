@@ -215,7 +215,7 @@ const SIMILARITY: usize = 40;
 
 type KeyVec = Vec<Option<FragmentKey>>;
 
-pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossary<'d>, KeyVec) {
+pub fn build_glossary(filename: &str, detectors: Vec<Detector>) -> (Glossary, KeyVec) {
     // (100, 199), (200, 299), ... (1900, 1999)
     //let regions: Vec<_> = (1 .. 33).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
     //let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
@@ -287,7 +287,7 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
                 }
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
-                let fragment_key = dictionary.insert_fragment(fragment, detectors, SIMILARITY);
+                let fragment_key = dictionary.insert_fragment(fragment, &detectors, SIMILARITY);
 
                 keys.push(fragment_key);
             }
@@ -301,7 +301,7 @@ pub fn build_glossary<'d>(filename: &str, detectors: &'d [Detector]) -> (Glossar
 
     println!("\nCompleted.");
 
-    (Glossary::from_dictionaries(detectors, dictionaries), keys)
+    (Glossary::new(detectors, dictionaries), keys)
 }
 
 pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {

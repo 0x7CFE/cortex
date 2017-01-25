@@ -62,7 +62,7 @@ fn main() {
         println!("detector[{:3}]\tfreq {:.2},\tband {:.2}", i, freq, band);
     }
 
-    let (glossary, keys) = sound::build_glossary(input_filename, &detectors);
+    let (glossary, keys) = sound::build_glossary(input_filename, detectors);
 
     let entropy: usize = keys
         .iter()

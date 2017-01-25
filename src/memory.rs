@@ -200,34 +200,20 @@ pub struct Dictionary {
     upper_frequency: f32,
 }
 
-pub struct Glossary<'a> {
-    detectors: &'a [Detector],
-    //dictionaries: HashMap<(f32, f32), Dictionary<'a>>,
+pub struct Glossary {
+    detectors: Vec<Detector>,
     dictionaries: Vec<Dictionary>,
 }
 
-impl<'a> Glossary<'a> {
-    pub fn new(detectors: &[Detector]) -> Glossary {
-        Glossary {
-            detectors: detectors,
-            //dictionaries: HashMap::new(),
-            dictionaries: Vec::new(),
-        }
-    }
-
-    pub fn from_dictionaries<'b>(detectors: &'b [Detector], dictionaries: Vec<Dictionary>) -> Glossary<'b> {
+impl Glossary {
+    pub fn new(detectors: Vec<Detector>, dictionaries: Vec<Dictionary>) -> Glossary {
         Glossary {
             detectors: detectors,
             dictionaries: dictionaries,
         }
     }
 
-    pub fn insert(&mut self, dictionary: Dictionary) {
-        //let bounds = dictionary.get_bounds();
-        self.dictionaries.push(dictionary);
-    }
-
-    pub fn iter(&'a self) -> impl Iterator<Item=&'a Dictionary> {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a Dictionary> {
         self.dictionaries.iter()
     }
 }
