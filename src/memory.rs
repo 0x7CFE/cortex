@@ -13,33 +13,52 @@ use std::f32::consts::PI;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
-use bit_vec::BitVec;
-use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use serde::{Serialize, Serializer, Deserialize, Deserializer, Error};
+use serde::de::{Visitor, SeqVisitor};
 
 use sound; // {Spectrum, Cplx, Detector};
 use sound::*;
 
-/// Special wrapper over `BitVec` that optimizes the case when
-/// bit vector contains relatively small amount of set bits.
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct SparseBitVec {
-    leading_zeros: usize,
-    trailing_zeros: usize,
-    bits_set: usize,
-    bits: BitVec,
+// We need to implement serde for a foreign type
+#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct BitVec(::bit_vec::BitVec);
+use std::ops::{Deref, DerefMut};
+
+impl BitVec {
+    pub fn new() -> Self {
+        BitVec(::bit_vec::BitVec::new())
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        BitVec(::bit_vec::BitVec::from_bytes(bytes))
+    }
+
+    pub fn from_fn<F>(len: usize, f: F) -> Self
+        where F: FnMut(usize) -> bool
+    {
+        BitVec(::bit_vec::BitVec::from_fn(len, f))
+    }
 }
 
-impl Serialize for SparseBitVec {
+impl Deref for BitVec {
+    type Target = ::bit_vec::BitVec;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for BitVec {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Serialize for BitVec {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
         where S: Serializer
     {
-        // TODO This may be easily restored during deserialization
-        serializer.serialize_usize(self.leading_zeros)?;
-        serializer.serialize_usize(self.trailing_zeros)?;
-        serializer.serialize_usize(self.bits_set)?;
-
-        let mut state = serializer.serialize_seq(Some(self.bits.capacity() / 32))?;
-        for block in self.bits.blocks() {
+        let mut state = serializer.serialize_seq(Some(self.capacity() / 32))?;
+        for block in self.blocks() {
             serializer.serialize_seq_elt(&mut state, block)?;
         }
         serializer.serialize_seq_end(state)?;
@@ -48,12 +67,44 @@ impl Serialize for SparseBitVec {
     }
 }
 
-impl Deserialize for SparseBitVec {
+impl Deserialize for BitVec {
     fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
         where D: Deserializer
     {
-        Ok(SparseBitVec::new()) // TODO
+        struct BitVecVisitor;
+
+        impl Visitor for BitVecVisitor {
+            type Value = BitVec;
+
+            #[inline]
+            fn visit_seq<V>(&mut self, mut visitor: V) -> Result<BitVec, V::Error>
+                where V: SeqVisitor,
+            {
+                let mut values = BitVec::new();
+
+                while let Some(value) = visitor.visit::<u32>()? {
+                    // TODO
+                }
+
+                visitor.end()?;
+
+                Ok(values)
+            }
+        }
+
+        deserializer.deserialize_seq(BitVecVisitor)
     }
+}
+
+
+/// Special wrapper over `BitVec` that optimizes the case when
+/// bit vector contains relatively small amount of set bits.
+#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SparseBitVec {
+    leading_zeros: usize,
+    trailing_zeros: usize,
+    bits_set: usize,
+    bits: BitVec,
 }
 
 impl Debug for SparseBitVec {
@@ -87,26 +138,26 @@ impl SparseBitVec {
     }
 
     pub fn from_bitvec(bits: BitVec) -> SparseBitVec {
-        let mut idea = SparseBitVec {
+        let mut result = SparseBitVec {
             bits_set: 0,
             leading_zeros: 0,
             trailing_zeros: 0,
             bits: bits,
         };
 
-        for bit in &idea.bits {
+        for bit in result.bits.iter() {
             if bit {
-                idea.bits_set += 1;
-                idea.trailing_zeros = 0;
+                result.bits_set += 1;
+                result.trailing_zeros = 0;
             } else {
-                if idea.bits_set == 0 {
-                    idea.leading_zeros += 1;
+                if result.bits_set == 0 {
+                    result.leading_zeros += 1;
                 }
-                idea.trailing_zeros += 1;
+                result.trailing_zeros += 1;
             }
         }
 
-        idea
+        result
     }
 
     pub fn from_bytes(bytes: &[u8]) -> SparseBitVec {
@@ -172,7 +223,7 @@ impl FragmentKey {
 /// of the spectrum within predefined frequency range.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Fragment {
-    /// Complete slice of DFT.
+    /// Slice of DFT within Dictionary's range.
     spectra: Vec<Spectrum>,
 
     /// Weight of fragment as prototype.
@@ -190,19 +241,9 @@ impl Fragment {
         }
     }
 
-    pub fn from_spectra(spectra: Vec<Spectrum> /*, lower_index: usize, upper_index: usize*/) -> Fragment {
+    pub fn from_spectra(spectra: Vec<Spectrum>) -> Fragment {
         Fragment {
             spectra: spectra,
-
-            /*spectra: spectra.iter()
-                .map(|s| {
-                    (&s[lower_index .. upper_index + 1])
-                        .iter()
-                        .cloned()
-                        .collect()
-                })
-                .collect(),*/
-
             merge_weight: 1,
         }
     }
@@ -231,6 +272,8 @@ pub struct Dictionary {
     upper_frequency: f32,
 }
 
+/// `Glossary` is a collection of `Dictionary`'s that spans
+/// `the whole spectrum or it's interesting part.
 #[derive(Serialize, Deserialize)]
 pub struct Glossary {
     detectors: Vec<Detector>,

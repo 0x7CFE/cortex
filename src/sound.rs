@@ -7,7 +7,6 @@ use std::f32::consts::PI;
 use std::io::{Read};
 use dft;
 
-pub use bit_vec::BitVec;
 
 use hound;
 use memory::*;
