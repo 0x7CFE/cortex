@@ -10,8 +10,7 @@ use std::cell::RefCell;
 use std::cmp::{Ord, Ordering, max};
 use std::f32::consts::PI;
 
-use std::fmt;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{self, Debug, Formatter};
 
 use serde::{Serialize, Serializer, Deserialize, Deserializer, Error};
 use serde::de::{Visitor, SeqVisitor};
@@ -57,13 +56,9 @@ impl Serialize for BitVec {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
         where S: Serializer
     {
-        let mut state = serializer.serialize_seq(Some(self.capacity() / 32))?;
-        for block in self.blocks() {
-            serializer.serialize_seq_elt(&mut state, block)?;
-        }
-        serializer.serialize_seq_end(state)?;
-
-        Ok(())
+        // TODO Eliminate copying
+        let bytes = self.to_bytes();
+        serializer.serialize_bytes(&bytes)
     }
 }
 
@@ -77,18 +72,10 @@ impl Deserialize for BitVec {
             type Value = BitVec;
 
             #[inline]
-            fn visit_seq<V>(&mut self, mut visitor: V) -> Result<BitVec, V::Error>
-                where V: SeqVisitor,
+            fn visit_bytes<E>(&mut self, v: &[u8]) -> Result<Self::Value, E>
+                where E: Error
             {
-                let mut values = BitVec::new();
-
-                while let Some(value) = visitor.visit::<u32>()? {
-                    // TODO
-                }
-
-                visitor.end()?;
-
-                Ok(values)
+                Ok(BitVec::from_bytes(v))
             }
         }
 
