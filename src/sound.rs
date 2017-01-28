@@ -23,9 +23,9 @@ use sample::window::Type;
 pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;
 pub const PHASE_DEVIATION_DB: f32 = PI / 4.;
 
-//pub type Cplx = Complex<f32>;
+pub type Cplx = ::num_complex::Complex<f32>;
 
-use std::ops::{Deref, DerefMut};
+/*use std::ops::{Deref, DerefMut};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::SerializeTuple;
 
@@ -69,7 +69,7 @@ impl Deserialize for Cplx {
     {
         Ok(Cplx::default())
     }
-}
+} */
 
 use std::cmp::Ordering;
 pub type Samples  = Vec<Cplx>;
