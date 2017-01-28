@@ -1,5 +1,5 @@
 
-use num_complex::*;
+use num_complex;
 use num_traits::Float;
 
 use std::rc::Rc;
@@ -7,6 +7,7 @@ use std::f32::consts::PI;
 use std::io::{Read};
 use dft;
 
+//pub use bit_vec::BitVec;
 
 use hound;
 use memory::*;
@@ -22,7 +23,53 @@ use sample::window::Type;
 pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;
 pub const PHASE_DEVIATION_DB: f32 = PI / 4.;
 
-pub type Cplx = Complex<f32>;
+//pub type Cplx = Complex<f32>;
+
+use std::ops::{Deref, DerefMut};
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::ser::SerializeTuple;
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct Cplx(::num_complex::Complex<f32>);
+
+impl Cplx {
+    pub fn new(re: f32, im: f32) -> Cplx {
+        Cplx(::num_complex::Complex::<f32>::new(re, im))
+    }
+}
+
+impl Deref for Cplx {
+    type Target = ::num_complex::Complex<f32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Cplx {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Serialize for Cplx {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        let mut tuple = serializer.serialize_tuple(2)?;
+        tuple.serialize_element(&self.0.re)?;
+        tuple.serialize_element(&self.0.im)?;
+        tuple.end()
+    }
+}
+
+impl Deserialize for Cplx {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer
+    {
+        Ok(Cplx::default())
+    }
+}
 
 use std::cmp::Ordering;
 pub type Samples  = Vec<Cplx>;
@@ -212,12 +259,32 @@ const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
 const SIMILARITY: usize = 40;
 
-type KeyVec = Vec<Option<FragmentKey>>;
+pub type KeyVec = Vec<Option<FragmentKey>>;
 
-pub fn build_glossary(filename: &str, detectors: Vec<Detector>) -> (Glossary, KeyVec) {
+pub fn build_glossary(filename: &str) -> (Glossary, KeyVec) {
     // (100, 199), (200, 299), ... (1900, 1999)
     //let regions: Vec<_> = (1 .. 33).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
     //let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
+
+    let mut detectors = Vec::new();
+
+    // Populating detectors from 0Hz to ~1KHz with ~2683Hz
+    for i in 1 .. 141 {
+        let freq = detector_freq(i);
+        let band = 2. * (detector_freq(i+1) - freq);
+
+//         for phase in vec![ -PI, -3.*PI/4., -PI/2., -PI/4., 0., PI/4., PI/2., 3.*PI/4., PI]
+        for phase in vec![ -PI, -PI/2., 0., PI/2., PI ]
+        {
+            detectors.push(Detector::new(freq, band, -5.,  phase));
+            detectors.push(Detector::new(freq, band, -15., phase));
+            detectors.push(Detector::new(freq, band, -25., phase));
+            detectors.push(Detector::new(freq, band, -35., phase));
+            //detectors.push(Detector::new(freq, band, -45., phase));
+        }
+
+        println!("detector[{:3}]\tfreq {:.2},\tband {:.2}", i, freq, band);
+    }
 
     let mut dictionaries: Vec<_> = (1 .. 14).into_iter()
         .map(|i| (detector_freq(i*10), detector_freq((i+1)*10)) )
@@ -286,9 +353,9 @@ pub fn build_glossary(filename: &str, detectors: Vec<Detector>) -> (Glossary, Ke
                 }
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
-                let fragment_key = dictionary.insert_fragment(fragment, &detectors, SIMILARITY);
+                let key = dictionary.insert_fragment(fragment, &detectors, SIMILARITY);
 
-                keys.push(fragment_key);
+                keys.push(key);
             }
 
             println!("frame {}, dictionary {}, fragments classified {}", frame_count, index, dictionary.len());
@@ -299,6 +366,18 @@ pub fn build_glossary(filename: &str, detectors: Vec<Detector>) -> (Glossary, Ke
     }
 
     println!("\nCompleted.");
+
+    let entropy: usize = keys
+        .iter()
+        .map(|opt|
+            match opt {
+                &Some(ref key) => key.bits().iter().map(|b| b as usize).sum(),
+                &None => 0,
+            }
+        )
+        .sum();
+
+    println!("Key entropy {}", entropy);
 
     (Glossary::new(detectors, dictionaries), keys)
 }

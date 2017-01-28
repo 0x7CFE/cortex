@@ -12,8 +12,12 @@ use std::f32::consts::PI;
 
 use std::fmt::{self, Debug, Formatter};
 
-use serde::{Serialize, Serializer, Deserialize, Deserializer, Error};
-use serde::de::{Visitor, SeqVisitor};
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::ser::SerializeSeq;
+use serde::de::{Visitor, Error};
+
+// use serde::ser::{Serialize, Serializer};
+// use serde::de::{Deserialize, Deserializer, Visitor, Error};
 
 use sound; // {Spectrum, Cplx, Detector};
 use sound::*;
@@ -41,6 +45,7 @@ impl BitVec {
 
 impl Deref for BitVec {
     type Target = ::bit_vec::BitVec;
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -53,17 +58,26 @@ impl DerefMut for BitVec {
 }
 
 impl Serialize for BitVec {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
         // TODO Eliminate copying
         let bytes = self.to_bytes();
-        serializer.serialize_bytes(&bytes)
+        //serializer.serialize_bytes(&bytes)
+
+        let mut seq = serializer.serialize_seq(Some(bytes.len()))?;
+        for byte in &bytes {
+            seq.serialize_element(byte)?;
+        }
+
+        seq.end()
+
+//         Ok(())
     }
 }
 
 impl Deserialize for BitVec {
-    fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: Deserializer
     {
         struct BitVecVisitor;
@@ -71,15 +85,21 @@ impl Deserialize for BitVec {
         impl Visitor for BitVecVisitor {
             type Value = BitVec;
 
+            fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+                write!(formatter, "&[u8]")
+            }
+
             #[inline]
-            fn visit_bytes<E>(&mut self, v: &[u8]) -> Result<Self::Value, E>
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
                 where E: Error
             {
                 Ok(BitVec::from_bytes(v))
             }
         }
 
-        deserializer.deserialize_seq(BitVecVisitor)
+        deserializer.deserialize_bytes(BitVecVisitor)
+
+//         Ok(BitVec::new())
     }
 }
 

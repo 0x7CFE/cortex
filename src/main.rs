@@ -14,9 +14,14 @@ extern crate sample;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
 
-extern crate bincode;
-use bincode::SizeLimit;
-use bincode::serde::serialize_into;
+// extern crate serde_json;
+// extern crate bincode;
+// use bincode::SizeLimit;
+// use bincode::serde::{serialize_into, deserialize_from};
+
+extern crate serde_cbor;
+use serde_cbor::ser::to_writer;
+use serde_cbor::de::from_reader;
 
 use clap::{Arg, App};
 
@@ -25,6 +30,9 @@ mod memory;
 mod iter;
 
 use sound::Detector;
+
+use sound::*;
+use memory::*;
 
 use std::f32::consts::PI;
 use std::fs::File;
@@ -40,91 +48,82 @@ fn main() {
             .help("Sets the input file to use")
             .required(true)
             .takes_value(true))
-        .arg(Arg::with_name("output")
-            .short("o")
-            .long("output")
-            .help("Sets the output file to rewrite")
+//         .arg(Arg::with_name("output")
+//             .short("o")
+//             .long("output")
+//             .help("Sets the output file to rewrite")
+//             .required(false)
+//             .takes_value(true))
+        .arg(Arg::with_name("build-glossary")
+            .long("build-glossary")
+            .help("Sets the glossary file name to build")
+            .required(false)
+            .takes_value(true))
+        .arg(Arg::with_name("use-glossary")
+            .long("use-glossary")
+            .help("Sets the glossary file to use")
+            .required(false)
+            .takes_value(true))
+        .arg(Arg::with_name("use-key")
+            .long("use-key")
+            .help("Sets the key file to use")
+            .required(false)
+            .takes_value(true))
+        .arg(Arg::with_name("write-key")
+            .long("write-key")
+            .help("Sets the key file to write")
+            .required(false)
+            .takes_value(true))
+        .arg(Arg::with_name("reconstruct")
+            .long("reconstruct")
+            .help("Sets the reconstruction file name")
             .required(false)
             .takes_value(true))
         .get_matches();
 
-    let input_filename = options.value_of("input").unwrap();
-    let mut detectors = Vec::new();
 
-    // Populating detectors from 0Hz to ~1KHz with ~2683Hz
-    for i in 1 .. 151 {
-        let freq = sound::detector_freq(i);
-        let band = 2. * (sound::detector_freq(i+1) - freq);
+    let (glossary, keys) = {
+        if let Some(glossary_filename) = options.value_of("build-glossary") {
+            let input_filename = options.value_of("input").unwrap();
+            let (glossary, keys) = sound::build_glossary(input_filename);
 
-//         for phase in vec![ -PI, -3.*PI/4., -PI/2., -PI/4., 0., PI/4., PI/2., 3.*PI/4., PI]
-        for phase in vec![ -PI, -PI/2., 0., PI/2., PI ]
-        {
-            detectors.push(Detector::new(freq, band, -5.,  phase));
-            detectors.push(Detector::new(freq, band, -15., phase));
-            detectors.push(Detector::new(freq, band, -25., phase));
-            detectors.push(Detector::new(freq, band, -35., phase));
-            //detectors.push(Detector::new(freq, band, -45., phase));
-        }
+            println!("Writing glossary file");
+            let mut glossary_file = File::create(glossary_filename).unwrap();
+//            serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
+            to_writer(&mut glossary_file, &glossary).unwrap();
 
-        println!("detector[{:3}]\tfreq {:.2},\tband {:.2}", i, freq, band);
-    }
-
-    let (glossary, keys) = sound::build_glossary(input_filename, detectors);
-
-    let entropy: usize = keys
-        .iter()
-        .map(|opt|
-            match opt {
-                &Some(ref key) => key.bits().iter().map(|b| b as usize).sum(),
-                &None => 0,
+            (glossary, keys)
+        } else if let Some(glossary_filename) = options.value_of("use-glossary") {
+            let key_filename = options.value_of("use-key");
+            if key_filename.is_none() {
+                println!("For now --use-glossary must go along with --use-key");
+                return;
             }
-        )
-        .sum();
 
-    println!("key entropy {}", entropy);
+            println!("Reading glossary");
+            let mut glossary_file = File::open(glossary_filename).unwrap();
+//             let glossary: Glossary = deserialize_from(&mut glossary_file, SizeLimit::Infinite).unwrap();
+            let glossary: Glossary = from_reader(glossary_file).unwrap();
 
-//     for (key, value) in dictionary.iter() {
-//         //println!("{:?} -> {:?}\n", key, value);
-//         println!("{:?}\n", key);
-//     }
+            println!("Reading key");
+            let mut key_file = File::open(key_filename.unwrap()).unwrap();
+//             let keys: KeyVec = deserialize_from(&mut key_file, SizeLimit::Infinite).unwrap();
+            let keys: KeyVec = from_reader(&mut key_file).unwrap();
 
-//     println!("{} fragments total", dictionary.len());
+            (glossary, keys)
+        } else {
+            println!("Either build-glossary or use-glossary should be provided");
+            return;
+        }
+    };
 
-    if let Some(output_prefix) = options.value_of("output") {
-        sound::reconstruct(output_prefix, &glossary, &keys);
-
-//         for (index, dictionary) in glossary.iter().enumerate() {
-//             let output_filename = format!("{}.{}.wav", output_prefix, index);
-//             sound::dump_dictionary(&output_filename, &dictionary);
-//         }
+    if let Some(key_filename) = options.value_of("write-key") {
+        let mut key_file = File::create(key_filename).unwrap();
+//         serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
+        to_writer(&mut key_file, &keys).unwrap();
     }
 
-    println!("Dumping glossary file");
-    let mut glossary_file = File::create("glossary.db").unwrap();
-    serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
-
-    let mut key_file = File::create("key.db").unwrap();
-    serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
-
-    /*let mask = sound::analyze_file(input_filename, &detectors);
-    println!("{} detectors, mask size {}", detectors.len(), mask.len());
-
-    for (i, bit) in mask.iter().enumerate() {
-        if i % detectors.len() == 0 {
-            println!();
-            print!("{:04} : ", i / detectors.len() + 1);
-        }
-
-        if i % (detectors.len() / 16) == 0 {
-            print!("\n        ");
-        }
-
-        print!("{}", if bit { "!" } else { "." } );
+    if let Some(reconstruct_filename) = options.value_of("reconstruct") {
+        sound::reconstruct(reconstruct_filename, &glossary, &keys);
     }
-
-    print!("\n\n");
-
-    if let Some(output_filename) = options.value_of("output") {
-        sound::generate_file(output_filename, &detectors, &mask);
-    }*/
 }
