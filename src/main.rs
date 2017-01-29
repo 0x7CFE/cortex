@@ -46,7 +46,7 @@ fn main() {
             .short("i")
             .long("input")
             .help("Sets the input file to use")
-            .required(true)
+            .required(false)
             .takes_value(true))
 //         .arg(Arg::with_name("output")
 //             .short("o")

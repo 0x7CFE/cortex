@@ -13,11 +13,7 @@ use std::f32::consts::PI;
 use std::fmt::{self, Debug, Formatter};
 
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
-// use serde::ser::SerializeSeq;
 use serde::de::{Visitor, Error};
-
-// use serde::ser::{Serialize, Serializer};
-// use serde::de::{Deserialize, Deserializer, Visitor, Error};
 
 use sound; // {Spectrum, Cplx, Detector};
 use sound::*;
@@ -61,29 +57,8 @@ impl Serialize for BitVec {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
         where S: Serializer
     {
-//         // TODO Eliminate copying
-//         let bytes = self.to_bytes();
-//         //serializer.serialize_bytes(&bytes)
-//
-//         let mut seq = serializer.serialize_seq(Some(bytes.len()))?;
-//         for byte in &bytes {
-//             seq.serialize_element(byte)?;
-//         }
-//
-//         seq.end()
-
         let bytes = self.to_bytes();
         serializer.serialize_bytes(&bytes)
-
-//         let mut seq = serializer.serialize_seq(Some(bytes.len()))?;
-//         for byte in &bytes {
-//             seq.serialize_element(byte)?;
-//         }
-//
-//         seq.end()
-
-
-//          Ok(())
     }
 }
 
@@ -96,10 +71,6 @@ impl Deserialize for BitVec {
         impl Visitor for BitVecVisitor {
             type Value = BitVec;
 
-//             fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-//                 write!(formatter, "&[u8]")
-//             }
-
             #[inline]
             fn visit_bytes<E>(&mut self, v: &[u8]) -> Result<Self::Value, E>
                 where E: Error
@@ -109,8 +80,6 @@ impl Deserialize for BitVec {
         }
 
         deserializer.deserialize_bytes(BitVecVisitor)
-
-//         Ok(BitVec::new())
     }
 }
 

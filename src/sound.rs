@@ -7,8 +7,6 @@ use std::f32::consts::PI;
 use std::io::{Read};
 use dft;
 
-//pub use bit_vec::BitVec;
-
 use hound;
 use memory::*;
 
@@ -24,52 +22,6 @@ pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;
 pub const PHASE_DEVIATION_DB: f32 = PI / 4.;
 
 pub type Cplx = ::num_complex::Complex<f32>;
-
-/*use std::ops::{Deref, DerefMut};
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use serde::ser::SerializeTuple;
-
-#[derive(Copy, Clone, Debug, Default)]
-pub struct Cplx(::num_complex::Complex<f32>);
-
-impl Cplx {
-    pub fn new(re: f32, im: f32) -> Cplx {
-        Cplx(::num_complex::Complex::<f32>::new(re, im))
-    }
-}
-
-impl Deref for Cplx {
-    type Target = ::num_complex::Complex<f32>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Cplx {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl Serialize for Cplx {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
-    {
-        let mut tuple = serializer.serialize_tuple(2)?;
-        tuple.serialize_element(&self.0.re)?;
-        tuple.serialize_element(&self.0.im)?;
-        tuple.end()
-    }
-}
-
-impl Deserialize for Cplx {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer
-    {
-        Ok(Cplx::default())
-    }
-} */
 
 use std::cmp::Ordering;
 pub type Samples  = Vec<Cplx>;
@@ -257,7 +209,7 @@ const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
 const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
 
-const SIMILARITY: usize = 40;
+const SIMILARITY: usize = 50;
 
 pub type KeyVec = Vec<Option<FragmentKey>>;
 

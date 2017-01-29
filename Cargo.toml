@@ -1,5 +1,5 @@
 [package]
-name = "fourier"
+name = "cortex"
 version = "0.1.0"
 authors = ["Dmitry Kashitsyn <korvin@deeptown.org>"]
 
