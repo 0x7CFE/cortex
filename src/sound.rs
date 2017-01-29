@@ -207,13 +207,10 @@ const FRAGMENTS_PER_FRAME: usize = 4;
 
 const SLICE_OFFSET:        usize = (NUM_POINTS / 2) / SLICES_PER_FRAME;
 const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
-const FRAGMENT_WINDOW: (f32, f32) = (350., 500.);
-
-const SIMILARITY: usize = 50;
 
 pub type KeyVec = Vec<Option<FragmentKey>>;
 
-pub fn build_glossary(filename: &str) -> (Glossary, KeyVec) {
+pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
     // (100, 199), (200, 299), ... (1900, 1999)
     //let regions: Vec<_> = (1 .. 33).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
     //let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
@@ -305,7 +302,7 @@ pub fn build_glossary(filename: &str) -> (Glossary, KeyVec) {
                 }
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
-                let key = dictionary.insert_fragment(fragment, &detectors, SIMILARITY);
+                let key = dictionary.insert_fragment(fragment, &detectors, similarity);
 
                 keys.push(key);
             }
@@ -334,7 +331,7 @@ pub fn build_glossary(filename: &str) -> (Glossary, KeyVec) {
     (Glossary::new(detectors, dictionaries), keys)
 }
 
-pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
+pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec, similarity: usize) {
     println!("Reconstructing {} from key vector of {} elements", filename, keys.len());
 
     let wav_header = hound::WavSpec {
@@ -393,7 +390,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec) {
                 };
 
                 // Writing sub spectrum into it's place in the frame's spectra
-                if let Some(fragment) = dictionary.find(fragment_key, SIMILARITY) {
+                if let Some(fragment) = dictionary.find(fragment_key, similarity) {
                     for (sub_index, sub_spectrum) in fragment.spectra().iter().enumerate() {
                         for (index, value) in sub_spectrum.iter().enumerate() {
                             spectra[fragment_index*SLICES_PER_FRAGMENT + sub_index][low + index] = *value;

@@ -54,6 +54,11 @@ fn main() {
 //             .help("Sets the output file to rewrite")
 //             .required(false)
 //             .takes_value(true))
+        .arg(Arg::with_name("similarity")
+            .long("similarity")
+            .help("Similarity coefficient in percents")
+            .required(false)
+            .takes_value(true))
         .arg(Arg::with_name("build-glossary")
             .long("build-glossary")
             .help("Sets the glossary file name to build")
@@ -81,11 +86,17 @@ fn main() {
             .takes_value(true))
         .get_matches();
 
+    let similarity =
+        if let Some(value) = options.value_of("similarity") {
+            value.parse().unwrap()
+        } else {
+            50
+        };
 
     let (glossary, keys) = {
         if let Some(glossary_filename) = options.value_of("build-glossary") {
             let input_filename = options.value_of("input").unwrap();
-            let (glossary, keys) = sound::build_glossary(input_filename);
+            let (glossary, keys) = sound::build_glossary(input_filename, similarity);
 
             println!("Writing glossary file");
             let mut glossary_file = File::create(glossary_filename).unwrap();
@@ -124,6 +135,6 @@ fn main() {
     }
 
     if let Some(reconstruct_filename) = options.value_of("reconstruct") {
-        sound::reconstruct(reconstruct_filename, &glossary, &keys);
+        sound::reconstruct(reconstruct_filename, &glossary, &keys, similarity);
     }
 }
