@@ -71,7 +71,7 @@ fn freq(index: usize) -> f32 {
 }
 
 // TODO Rewrite using https://crates.io/crates/float-cmp
-fn float_cmp<F: Float>(x: F, y: F, epsilon: F) -> Ordering {
+pub fn float_cmp<F: Float>(x: F, y: F, epsilon: F) -> Ordering {
     if (x - y).abs() < epsilon { return Ordering::Equal; }
 
     if x < y {

@@ -129,12 +129,16 @@ fn main() {
     };
 
     if let Some(key_filename) = options.value_of("write-key") {
+        println!("Writing key");
+
         let mut key_file = File::create(key_filename).unwrap();
 //         serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
         to_writer(&mut key_file, &keys).unwrap();
     }
 
     if let Some(reconstruct_filename) = options.value_of("reconstruct") {
+        println!("Reconstructing");
+
         sound::reconstruct(reconstruct_filename, &glossary, &keys, similarity);
     }
 }

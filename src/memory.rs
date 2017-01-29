@@ -307,9 +307,9 @@ impl Dictionary {
         })))
     }
 
-    fn fragment_key(freq_range: (f32, f32), detectors: &[Detector], fragment: &Fragment) -> FragmentKey {
+    fn fragment_key(fragment_range: (f32, f32), detectors: &[Detector], fragment: &Fragment) -> FragmentKey {
         let mut result = BitVec::new();
-        let base_index = (freq_range.0 / BASE_FREQUENCY).round() as usize;
+        let base_index = (fragment_range.0 / BASE_FREQUENCY).round() as usize;
 
         // FIXME Should filter by detectors within the dictionary's range
         for spectrum in fragment.spectra.iter() {
@@ -317,22 +317,55 @@ impl Dictionary {
             for detector in detectors {
                 use sound::*;
 
-                if detector.freq < freq_range.0 || detector.freq > freq_range.1 {
+                if detector.freq < fragment_range.0 || detector.freq > fragment_range.1 {
                     // Detector does not match frequency region of this dictionary
                     continue;
                 }
 
-                let index = (detector.freq / BASE_FREQUENCY).round() as usize - base_index;
+                let detector_range = (fragment_range.0.max(detector.freq - detector.band), fragment_range.1.min(detector.freq + detector.band));
 
-                let amplitude = (spectrum[index].norm() * 2.0) / NUM_POINTS as f32;
-                let phase = spectrum[index].arg();
+                // Each detector operates only in the fixed part of the spectrum
+                // Selecting potentially interesting spectrum slice to check
+                let low  = (detector_range.0.abs() / BASE_FREQUENCY).round() as usize - base_index;
+                let high = (detector_range.1.abs() / BASE_FREQUENCY).round() as usize - base_index;
+
+//                 println!("detector freq {} ± {}, amp {} ± {} dB, phase {}, spectrum len {}, {:?}",
+//                     detector.freq,
+//                     detector.band,
+//                     detector.amp,
+//                     AMPLITUDE_DEVIATION_DB,
+//                     detector.phase,
+//                     spectrum.len(),
+//                     (low, high)
+//                 );
+
+                if low > spectrum.len() - 1 || high > spectrum.len() - 1 {
+                    println!("invalid detector freq {}, band {}", detector.freq, detector.band);
+                    break;
+                }
+
+                let range = &spectrum[low .. high + 1];
+
+                // Selecting the entry with the largest amplitude
+                // TODO vary sensitivity depending on the frequency deviation
+                let (index, amplitude, phase) = range
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| (i, (c.norm() * 2.0) / NUM_POINTS as f32, c.arg()))
+                    .max_by(|&(_, x, _), &(_, y, _)| float_cmp(x, y, 0.00001))
+                    .unwrap_or((0, 0., 0.));
+
+//                 let index = (detector.freq / BASE_FREQUENCY).round() as usize - base_index;
+//                 let amplitude = (spectrum[index].norm() * 2.0) / NUM_POINTS as f32;
+//                 let phase = spectrum[index].arg();
 
                 let compress = |a| {
-                    if a > -50. && a < -15. {
-                        a + 10.
-                    } else {
-                        a
-                    }
+                    a
+//                     if a > -50. && a < -15. {
+//                         a + 10.
+//                     } else {
+//                         a
+//                     }
                 };
 
                 // Treating detector as active if max amplitude lays within detector's selectivity range
@@ -353,7 +386,7 @@ impl Dictionary {
 //                         AMPLITUDE_DEVIATION_DB,
 //                         detector.phase
 //                     );
-
+//
 //                     println!("signal amplitude {} → {} dB, phase {}{}\n",
 //                         amplitude,
 //                         to_decibel(amplitude),
@@ -400,7 +433,8 @@ impl Dictionary {
                 // Finding best entry to merge-in the new value
                 // TODO Optimize the case when at least threshold bits_set
                 if let Some((key, value, _)) = self.map
-                    .range_mut((Excluded(&lower_bound), Included(&pending_key)))
+                    .range_mut((Unbounded, Included(&pending_key)))
+//                     .range_mut((Excluded(&lower_bound), Included(&pending_key)))
                     .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
                     .filter(|&(_, _, m)| m >= bit_threshold)
                     .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
@@ -455,7 +489,8 @@ impl Dictionary {
         let bit_threshold = (key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
 
         if let Some((_, value, _)) = self.map
-            .range((Excluded(&lower_bound), Included(key)))
+            .range((Unbounded, Included(key)))
+//             .range((Excluded(&lower_bound), Included(key)))
             .map(|(k, v)| (k, v, k.0.fuzzy_eq(&key.0)))
             .filter(|&(_, _, m)| m >= bit_threshold)
             .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
@@ -598,5 +633,9 @@ mod sparse_bitvec {
             assert_eq!(v1.cmp(&v2), order, "{:?} vs {:?}", v1, v2);
             assert_eq!(v1.partial_cmp(&v2), Some(order), "{:?} vs {:?}", v1, v2);
         }
+    }
+
+    #[test] fn cmp_empty() {
+        assert_eq!(SparseBitVec::new(), SparseBitVec::new());
     }
 }
