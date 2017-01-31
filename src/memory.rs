@@ -360,12 +360,11 @@ impl Dictionary {
 //                 let phase = spectrum[index].arg();
 
                 let compress = |a| {
-                    a
-//                     if a > -50. && a < -15. {
-//                         a + 10.
-//                     } else {
-//                         a
-//                     }
+                    if a > -50. && a < -15. {
+                        a + 10.
+                    } else {
+                        a
+                    }
                 };
 
                 // Treating detector as active if max amplitude lays within detector's selectivity range
