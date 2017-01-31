@@ -1,21 +1,22 @@
 
-use num_complex;
-use num_traits::Float;
-
-use std::rc::Rc;
+use std::sync::Arc;
 use std::f32::consts::PI;
 use std::io::{Read};
 use dft;
 
 use hound;
-use memory::*;
-
-use itertools::Itertools;
-
-use iter::{CollectChunks, CollectChunksExt};
-
 use sample::*;
 use sample::window::Type;
+
+use num_complex;
+use num_traits::Float;
+
+use itertools::Itertools;
+use iter::{CollectChunks, CollectChunksExt};
+
+use rayon::prelude::*;
+
+use memory::*;
 
 // TODO Move to the Detector as individual field
 pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;
@@ -242,47 +243,45 @@ pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
     let mut reader = hound::WavReader::open(filename).unwrap();
-    let mut spectra = Vec::with_capacity(SLICES_PER_FRAME);
 
     println!("Building glossary... ");
     let mut frame_count = 0;
-
-    let mut keys = KeyVec::new();
 
     for (first, second) in reader
         .samples::<i16>()
         .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
         .collect_chunks::<Samples>(NUM_POINTS / 2)
-        .map(|chunk| Rc::new(chunk)) // Wrap into Rc for cheap cloning
+        .map(|chunk| Arc::new(chunk)) // Wrap into Rc for cheap cloning
         .tuple_windows()
     {
         if first.len() < NUM_POINTS / 2 || second.len() < NUM_POINTS / 2 {
             break;
         }
 
-        spectra.clear();
-
         // Collecting overlapping spectrums spanning the whole frame
-        for slice in 0 .. SLICES_PER_FRAME {
-            // Collecting samples
-            let first_range  = slice * SLICE_OFFSET ..;
-            let second_range = .. slice * SLICE_OFFSET;
+        let spectra: Vec<_> = (0 .. SLICES_PER_FRAME).into_par_iter()
+            .map( |slice| {
+                // Collecting samples
+                let first_range  = slice * SLICE_OFFSET ..;
+                let second_range = .. slice * SLICE_OFFSET;
 
-            let mut samples: Samples = first[first_range].iter()
-                .chain(second[second_range].iter())
-                .cloned()
-                .collect();
+                let mut samples: Samples = first[first_range].iter()
+                    .chain(second[second_range].iter())
+                    .cloned()
+                    .collect();
 
-            // Zero padding to the full frame length
-            samples.resize(NUM_POINTS, Cplx::default());
+                // Zero padding to the full frame length
+                samples.resize(NUM_POINTS, Cplx::default());
 
-            // Performing FFT
-            dft::transform(&mut samples, &plan);
-            spectra.push(samples as Spectrum);
-        }
+                // Performing FFT
+                dft::transform(&mut samples, &plan);
+
+                samples
+            })
+            .collect();
 
         // For each registered dictionary
-        for (index, dictionary) in dictionaries.iter_mut().enumerate() {
+        dictionaries.par_iter_mut().enumerate().for_each( |(index, dictionary)| {
             // Each dictionary operates only in the fixed part of the spectrum
             // Selecting potentially interesting spectrum slice to check
             let frequencies = dictionary.get_bounds();
@@ -303,32 +302,17 @@ pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
                 let key = dictionary.insert_fragment(fragment, &detectors, similarity);
-
-                keys.push(key);
             }
 
             println!("frame {}, dictionary {}, fragments classified {}", frame_count, index, dictionary.len());
-        }
+        });
 
-        println!("processed frame {}\n", frame_count);
         frame_count += 1;
     }
 
     println!("\nCompleted.");
 
-    let entropy: usize = keys
-        .iter()
-        .map(|opt|
-            match opt {
-                &Some(ref key) => key.bits().iter().map(|b| b as usize).sum(),
-                &None => 0,
-            }
-        )
-        .sum();
-
-    println!("Key entropy {}", entropy);
-
-    (Glossary::new(detectors, dictionaries), keys)
+    (Glossary::new(detectors, dictionaries), KeyVec::new())
 }
 
 pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec, similarity: usize) {

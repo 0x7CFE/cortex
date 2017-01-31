@@ -9,6 +9,7 @@ extern crate dft;
 extern crate clap;
 extern crate hound;
 extern crate sample;
+extern crate rayon;
 
 #[macro_use] extern crate itertools;
 #[macro_use] extern crate serde_derive;

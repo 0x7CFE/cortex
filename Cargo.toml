@@ -15,6 +15,7 @@ serde = "0.8"
 serde_derive = "0.8"
 bincode = "0.6"
 serde_cbor = "0.4"
+rayon = "0.6"
 
 [dependencies.num-complex]
 version = "0.1.35"
