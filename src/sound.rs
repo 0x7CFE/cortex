@@ -307,6 +307,7 @@ pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
             println!("frame {}, dictionary {}, fragments classified {}", frame_count, index, dictionary.len());
         });
 
+        println!();
         frame_count += 1;
     }
 

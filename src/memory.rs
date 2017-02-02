@@ -204,6 +204,17 @@ impl FragmentKey {
     pub fn bits(&self) -> &BitVec {
         &self.0.bits()
     }
+
+    pub fn lower_bound(&self) -> FragmentKey {
+        let mask = &self.0;
+        let len  = mask.bits.len();
+
+        if mask.bits_set == 0 {
+            FragmentKey(SparseBitVec::from_bitvec(BitVec::from_fn(len, |_| false)))
+        } else {
+            FragmentKey(SparseBitVec::from_bitvec(BitVec::from_fn(len, |x| x >= len - mask.trailing_zeros)))
+        }
+    }
 }
 
 /// `Fragment` represents several time slices
@@ -295,16 +306,6 @@ impl Dictionary {
 
     pub fn get_bounds(&self) -> (f32, f32) {
         (self.lower_frequency, self.upper_frequency)
-    }
-
-    pub fn lower_bound(key: &FragmentKey) -> FragmentKey {
-        let mask = &key.0;
-        let len = mask.bits.len();
-
-        // Set all bits except trailing zeros to zero
-        FragmentKey(SparseBitVec::from_bitvec(BitVec::from_fn(len, |x| {
-            x > mask.leading_zeros + mask.bits_set
-        })))
     }
 
     fn fragment_key(fragment_range: (f32, f32), detectors: &[Detector], fragment: &Fragment) -> FragmentKey {
@@ -417,7 +418,7 @@ impl Dictionary {
 
         // Lower bound is the least meaningful element of the dictionary
         // which, if represented by a number, is less than the key's number
-        let mut lower_bound = Self::lower_bound(&pending_key);
+        let mut lower_bound = pending_key.lower_bound();
 
         enum KeyState {
             NotChanged,
@@ -464,7 +465,7 @@ impl Dictionary {
 
                 // Recalculating lower bound if new key has more bits to the right
                 if pending_key.0.trailing_zeros < lower_bound.0.bits_set {
-                    lower_bound = Self::lower_bound(&pending_key);
+                    lower_bound = pending_key.lower_bound();
                 }
             } else {
                 // No suitable match was found, inserting fragment as the new prototype
@@ -482,7 +483,7 @@ impl Dictionary {
 
         // Lower bound is the least meaningful element of the dictionary
         // which, if represented by a number, is less than the key's number
-        let lower_bound = Self::lower_bound(&key);
+        let lower_bound = key.lower_bound();
 
         // Amount of bits to match the requested similarity percent
         let bit_threshold = (key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
@@ -637,4 +638,38 @@ mod sparse_bitvec {
     #[test] fn cmp_empty() {
         assert_eq!(SparseBitVec::new(), SparseBitVec::new());
     }
+}
+
+#[cfg(test)]
+mod fragment_key {
+    use super::*;
+
+    #[test] fn lower_bound() {
+        let data = &[
+            // key            lower bound
+            ([0b_0000_0000], [0b_0000_0000]), // FIXME Unbounded?
+            ([0b_0000_1111], [0b_0000_0000]),
+            ([0b_1000_0001], [0b_0000_0000]),
+            ([0b_1111_1111], [0b_0000_0000]),
+
+            ([0b_0000_0010], [0b_0000_0001]),
+            ([0b_0111_1110], [0b_0000_0001]),
+            ([0b_1000_0010], [0b_0000_0001]),
+            ([0b_1111_1110], [0b_0000_0001]),
+
+            ([0b_1111_0000], [0b_0000_1111]),
+            ([0b_0001_0000], [0b_0000_1111]),
+            ([0b_1001_0000], [0b_0000_1111]),
+
+            ([0b_1000_0000], [0b_0111_1111]),
+        ];
+
+         for &(key_bytes, bound_bytes) in data {
+            let key      = FragmentKey::from_bitvec(BitVec::from_bytes(&key_bytes));
+            let expected = FragmentKey::from_bitvec(BitVec::from_bytes(&bound_bytes));
+            let actual   = key.lower_bound();
+
+            assert_eq!(expected, actual, "test key: {:?}", key);
+        }
+   }
 }
