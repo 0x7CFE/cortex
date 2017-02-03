@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
-use std::collections::Bound::{Included, Excluded, Unbounded};
+use std::collections::Bound::{self, Included, Excluded, Unbounded};
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -205,14 +205,14 @@ impl FragmentKey {
         &self.0.bits()
     }
 
-    pub fn lower_bound(&self) -> FragmentKey {
+    pub fn lower_bound(&self) -> Option<FragmentKey> {
         let mask = &self.0;
         let len  = mask.bits.len();
 
         if mask.bits_set == 0 {
-            FragmentKey(SparseBitVec::from_bitvec(BitVec::from_fn(len, |_| false)))
+            None
         } else {
-            FragmentKey(SparseBitVec::from_bitvec(BitVec::from_fn(len, |x| x >= len - mask.trailing_zeros)))
+            Some(FragmentKey(SparseBitVec::from_bitvec(BitVec::from_fn(len, |x| x >= len - mask.trailing_zeros))))
         }
     }
 }
@@ -430,11 +430,15 @@ impl Dictionary {
                 // Amount of bits to match the requested similarity percent
                 let bit_threshold = (pending_key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
 
+                let bound = match lower_bound.as_ref() {
+                    Some(key) => Excluded(key),
+                    None => Unbounded
+                };
+
                 // Finding best entry to merge-in the new value
                 // TODO Optimize the case when at least threshold bits_set
                 if let Some((key, value, _)) = self.map
-                    .range_mut((Unbounded, Included(&pending_key)))
-//                     .range_mut((Excluded(&lower_bound), Included(&pending_key)))
+                    .range_mut((bound, Included(&pending_key)))
                     .map(|(k, v)| (k, v, k.0.fuzzy_eq(&pending_key.0)))
                     .filter(|&(_, _, m)| m >= bit_threshold)
                     .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
@@ -463,10 +467,12 @@ impl Dictionary {
                 // Pending value will be re-inserted with a new pending key
                 pending_value = self.map.remove(&old_key).unwrap();
 
-                // Recalculating lower bound if new key has more bits to the right
-                if pending_key.0.trailing_zeros < lower_bound.0.bits_set {
+                // Recalculating lower bound if new key's bound differs
+                let bits_set = lower_bound.as_ref().map(|b| b.0.bits_set).unwrap_or(0);
+                if pending_key.0.trailing_zeros != bits_set {
                     lower_bound = pending_key.lower_bound();
                 }
+
             } else {
                 // No suitable match was found, inserting fragment as the new prototype
                 let key = pending_key.clone();
@@ -484,13 +490,16 @@ impl Dictionary {
         // Lower bound is the least meaningful element of the dictionary
         // which, if represented by a number, is less than the key's number
         let lower_bound = key.lower_bound();
+        let bound = match lower_bound.as_ref() {
+            Some(key) => Excluded(key),
+            None => Unbounded
+        };
 
         // Amount of bits to match the requested similarity percent
         let bit_threshold = (key.0.bits_set as f32 / 100. * similarity as f32).round() as usize;
 
         if let Some((_, value, _)) = self.map
-            .range((Unbounded, Included(key)))
-//             .range((Excluded(&lower_bound), Included(key)))
+            .range((bound, Included(key)))
             .map(|(k, v)| (k, v, k.0.fuzzy_eq(&key.0)))
             .filter(|&(_, _, m)| m >= bit_threshold)
             .max_by(|x, y| x.2.cmp(&y.2)) // max by matched_bits
