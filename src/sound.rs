@@ -82,127 +82,6 @@ pub fn float_cmp<F: Float>(x: F, y: F, epsilon: F) -> Ordering {
     }
 }
 
-pub fn filter_detectors_inplace(spectrum: &SpectrumSlice, detectors: &[Detector], result: &mut BitVec) {
-    // Iterating through all detectors filtering out activity
-    for detector in detectors {
-        let index = (detector.freq / BASE_FREQUENCY).round() as usize;
-
-        println!("detector freq {} ± {}, amp {} ± {} dB, phase {}",
-            detector.freq,
-            detector.band,
-            detector.amp,
-            AMPLITUDE_DEVIATION_DB,
-            detector.phase
-        );
-
-        // Selecting the entry with the largest amplitude
-        let amplitude = (spectrum[index].norm() * 2.0) / NUM_POINTS as f32;
-        let phase = spectrum[index].arg();
-
-        // Treating detector as active if max amplitude lays within detector's selectivity range
-        let amp_match   = (to_decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
-
-        // + PI is required to compare positive and negative values
-        let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < PHASE_DEVIATION_DB;
-
-        let is_active   = amp_match && phase_match;
-        result.push(is_active);
-
-        println!("signal amplitude {} → {} dB, phase {}{}\n",
-            amplitude,
-            to_decibel(amplitude),
-            phase,
-            if is_active { ", **MATCH**" } else { "" }
-        );
-    }
-}
-
-pub fn filter_detectors_inplace2(spectrum: &SpectrumSlice, detectors: &[Detector], result: &mut BitVec) {
-    // Iterating through all detectors filtering out activity
-    for detector in detectors {
-        // Each detector operates only in the fixed part of the spectrum
-        // Selecting potentially interesting spectrum slice to check
-        let lo = ((detector.freq - detector.band).abs() / BASE_FREQUENCY).round() as usize;
-        let hi = ((detector.freq + detector.band).abs() / BASE_FREQUENCY).round() as usize;
-
-        if lo > spectrum.len() - 1 || hi > spectrum.len() - 1 {
-            println!("invalid detector freq {}, band {}", detector.freq, detector.band);
-            break;
-        }
-
-        let range = &spectrum[lo .. hi + 1];
-
-        println!("detector freq {} ± {}, amp {} ± {} dB, phase {}, selected freq range is {} .. {}",
-            detector.freq,
-            detector.band,
-            detector.amp,
-            AMPLITUDE_DEVIATION_DB,
-            detector.phase,
-            freq(lo),
-            freq(hi)
-        );
-
-        // Selecting the entry with the largest amplitude
-        let (index, amplitude, phase) = range
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (i, (c.norm() * 2.0) / NUM_POINTS as f32, c.arg()))
-            .max_by(|&(_, x, _), &(_, y, _)| float_cmp(x, y, 0.00001))
-            .unwrap();
-
-        // Treating detector as active if max amplitude lays within detector's selectivity range
-        let amp_match   = (to_decibel(amplitude).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
-        let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < PHASE_DEVIATION_DB;
-        let is_active   = amp_match && phase_match;
-
-        println!("signal frequency {}, amplitude {} → {} dB, phase {}{}\n",
-            freq(lo+index),
-            amplitude,
-            to_decibel(amplitude),
-            phase,
-            if is_active { ", **MATCH**" } else { "" }
-        );
-
-        result.push(is_active);
-    }
-}
-
-pub fn analyze_file(filename: &str, detectors: &[Detector]) -> BitVec {
-    // This will hold resulting bit vector of the detectors activity mask
-    let mut result = BitVec::new();
-
-    // Opening wave file for reading
-    let mut reader = hound::WavReader::open(filename).unwrap();
-    let mut total_samples = 0;
-
-    // Reading file by chunks of NUM_POINTS, normalizing value to [0 .. 1], then processing
-    for chunk in 1 .. {
-        let mut samples: Samples = reader
-            .samples::<i16>()
-            .take(NUM_POINTS / 2)
-            .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
-            .collect();
-
-        total_samples += samples.len();
-
-        if samples.len() < NUM_POINTS / 2 {
-            println!("*** End of input, samples processed: {}, chunks {}", total_samples, chunk - 1);
-            break;
-        }
-
-        println!("*** Chunk {}", chunk);
-        samples.resize(NUM_POINTS, Cplx::default());
-
-        let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
-        dft::transform(&mut samples, &plan);
-
-        filter_detectors_inplace(&samples[..NUM_POINTS/2 - 1], detectors, &mut result);
-        println!("total samples so far {}", total_samples);
-    }
-
-    result
-}
-
 const SLICES_PER_FRAME:    usize = 16;
 const FRAGMENTS_PER_FRAME: usize = 4;
 
@@ -211,35 +90,116 @@ const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 
 pub type KeyVec = Vec<Option<FragmentKey>>;
 
-pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
-    // (100, 199), (200, 299), ... (1900, 1999)
-    //let regions: Vec<_> = (1 .. 33).into_iter().map(|i: u32| (i as f32 * 100., i as f32 * 100. + 99.)).collect();
-    //let mut dictionaries: Vec<_> = regions.iter().map(|r| Dictionary::new(detectors, r.0, r.1)).collect();
-
+pub fn build_detectors() -> Vec<Detector> {
     let mut detectors = Vec::new();
 
-    // Populating detectors from 0Hz to ~1KHz with ~2683Hz
     for i in 1 .. 141 {
         let freq = detector_freq(i);
         let band = 2. * (detector_freq(i+1) - freq);
 
-//         for phase in vec![ -PI, -3.*PI/4., -PI/2., -PI/4., 0., PI/4., PI/2., 3.*PI/4., PI]
-        for phase in vec![ -PI, -PI/2., 0., PI/2., PI ]
+        for &phase in &[ -PI, -PI/2., 0., PI/2., PI ]
         {
             detectors.push(Detector::new(freq, band, -5.,  phase));
             detectors.push(Detector::new(freq, band, -15., phase));
             detectors.push(Detector::new(freq, band, -25., phase));
             detectors.push(Detector::new(freq, band, -35., phase));
-            //detectors.push(Detector::new(freq, band, -45., phase));
         }
-
-        println!("detector[{:3}]\tfreq {:.2},\tband {:.2}", i, freq, band);
     }
 
-    let mut dictionaries: Vec<_> = (1 .. 14).into_iter()
+    detectors
+}
+
+pub fn build_bounds() -> Vec<(f32, f32)> {
+    (1 .. 14).into_iter()
         .map(|i| (detector_freq(i*10), detector_freq((i+1)*10)) )
-        .map(|(low, high)| Dictionary::new(low, high))
-        .collect();
+        .collect()
+}
+
+pub fn build_dictionaries(bounds: &Vec<(f32, f32)>) -> Vec<Dictionary> {
+    bounds.iter()
+        .map(|&(low, high)| Dictionary::new(low, high))
+        .collect()
+}
+
+pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
+    // This will hold resulting bit vector of the detectors activity mask
+    let mut result = KeyVec::new();
+
+    let detectors = build_detectors();
+    let bounds = build_bounds();
+
+    // Opening wave file for reading
+    let mut reader = hound::WavReader::open(filename).unwrap();
+    let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
+
+    let mut total_samples = 0;
+
+    for (first, second) in reader
+        .samples::<i16>()
+        .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
+        .collect_chunks::<Samples>(NUM_POINTS / 2)
+        .map(|chunk| Arc::new(chunk)) // Wrap into Rc for cheap cloning
+        .tuple_windows()
+    {
+        if first.len() < NUM_POINTS / 2 || second.len() < NUM_POINTS / 2 {
+            break;
+        }
+
+        // Collecting overlapping spectrums spanning the whole frame
+        let spectra: Vec<_> = (0 .. SLICES_PER_FRAME).into_par_iter()
+            .map( |slice| {
+                // Collecting samples
+                let first_range  = slice * SLICE_OFFSET ..;
+                let second_range = .. slice * SLICE_OFFSET;
+
+                let mut samples: Samples = first[first_range].iter()
+                    .chain(second[second_range].iter())
+                    .cloned()
+                    .collect();
+
+                // Zero padding to the full frame length
+                samples.resize(NUM_POINTS, Cplx::default());
+
+                // Performing FFT
+                dft::transform(&mut samples, &plan);
+
+                samples
+            })
+            .collect();
+
+        // For each registered dictionary
+        for (index, bound) in bounds.iter().enumerate() {
+            // Each dictionary operates only in the fixed part of the spectrum
+            // Selecting potentially interesting spectrum slice to check
+            let low  = (bound.0 / BASE_FREQUENCY).round() as usize;
+            let high = (bound.1 / BASE_FREQUENCY).round() as usize;
+
+            for fragment_index in 0 .. FRAGMENTS_PER_FRAME {
+                let mut fragment_spectra = Vec::with_capacity(high - low);
+
+                // We split the whole frame into several independent fragments each
+                // having it's part of the time slice and own place in the dictionary
+                let fragment_region = fragment_index*SLICES_PER_FRAGMENT .. (fragment_index + 1)*SLICES_PER_FRAGMENT;
+                for spectrum in &spectra[fragment_region] {
+                    // Spectrum slices for the particular fragment's frequency region
+                    let slice: Spectrum = spectrum[low .. high + 1].iter().cloned().collect();
+                    fragment_spectra.push(slice);
+                }
+
+                let fragment = Fragment::from_spectra(fragment_spectra);
+                let key = fragment.get_key(*bound, &detectors);
+            }
+        }
+    }
+
+    println!("\nCompleted.");
+
+    result
+}
+
+pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
+    let detectors = build_detectors();
+    let mut dictionaries = build_dictionaries(&build_bounds());
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
     let mut reader = hound::WavReader::open(filename).unwrap();
