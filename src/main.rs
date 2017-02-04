@@ -87,22 +87,25 @@ fn main() {
             .takes_value(true))
         .get_matches();
 
-    let similarity =
-        if let Some(value) = options.value_of("similarity") {
-            value.parse().unwrap()
-        } else {
-            50
-        };
+    let similarity = options.value_of("similarity").unwrap_or("50").parse().unwrap();
 
     let (glossary, keys) = {
         if let Some(glossary_filename) = options.value_of("build-glossary") {
             let input_filename = options.value_of("input").unwrap();
-            let (glossary, keys) = sound::build_glossary(input_filename, similarity);
+            let glossary = sound::build_glossary(input_filename, similarity);
 
             println!("Writing glossary file");
             let mut glossary_file = File::create(glossary_filename).unwrap();
 //            serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
             to_writer(&mut glossary_file, &glossary).unwrap();
+
+            let key_filename = options.value_of("write-key").unwrap();
+            let keys = sound::analyze_file(input_filename, &glossary);
+
+            println!("Writing key");
+            let mut key_file = File::create(key_filename).unwrap();
+    //         serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
+            to_writer(&mut key_file, &keys).unwrap();
 
             (glossary, keys)
         } else if let Some(glossary_filename) = options.value_of("use-glossary") {
@@ -128,14 +131,6 @@ fn main() {
             return;
         }
     };
-
-    if let Some(key_filename) = options.value_of("write-key") {
-        println!("Writing key");
-
-        let mut key_file = File::create(key_filename).unwrap();
-//         serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
-        to_writer(&mut key_file, &keys).unwrap();
-    }
 
     if let Some(reconstruct_filename) = options.value_of("reconstruct") {
         println!("Reconstructing");

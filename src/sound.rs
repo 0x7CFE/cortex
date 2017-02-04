@@ -122,6 +122,8 @@ pub fn build_dictionaries(bounds: &Vec<(f32, f32)>) -> Vec<Dictionary> {
 }
 
 pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
+    println!("Generating keys for {}...", filename);
+
     // This will hold resulting bit vector of the detectors activity mask
     let mut result = KeyVec::new();
 
@@ -197,14 +199,15 @@ pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
     result
 }
 
-pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
+pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
+    println!("Building glossary from {} ... ", filename);
+
     let detectors = build_detectors();
     let mut dictionaries = build_dictionaries(&build_bounds());
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
     let mut reader = hound::WavReader::open(filename).unwrap();
 
-    println!("Building glossary... ");
     let mut frame_count = 0;
 
     for (first, second) in reader
@@ -273,7 +276,7 @@ pub fn build_glossary(filename: &str, similarity: usize) -> (Glossary, KeyVec) {
 
     println!("\nCompleted.");
 
-    (Glossary::new(detectors, dictionaries), KeyVec::new())
+    Glossary::new(detectors, dictionaries)
 }
 
 pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec, similarity: usize) {
