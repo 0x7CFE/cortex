@@ -121,6 +121,29 @@ pub fn build_dictionaries(bounds: &Vec<(f32, f32)>) -> Vec<Dictionary> {
         .collect()
 }
 
+fn build_spectra(first_chunk: &Samples, second_chunk: &Samples, plan: &dft::Plan<f32>) -> Vec<Spectrum> {
+    (0 .. SLICES_PER_FRAME).into_par_iter()
+        .map( |slice| {
+            // Collecting samples
+            let first_range  = slice * SLICE_OFFSET ..;
+            let second_range = .. slice * SLICE_OFFSET;
+
+            let mut samples: Samples = first_chunk[first_range].iter()
+                .chain(second_chunk[second_range].iter())
+                .cloned()
+                .collect();
+
+            // Zero padding to the full frame length
+            samples.resize(NUM_POINTS, Cplx::default());
+
+            // Performing FFT
+            dft::transform(&mut samples, plan);
+
+            samples
+        })
+        .collect()
+}
+
 pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
     println!("Generating keys for {}...", filename);
 
@@ -148,26 +171,7 @@ pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
         }
 
         // Collecting overlapping spectrums spanning the whole frame
-        let spectra: Vec<_> = (0 .. SLICES_PER_FRAME).into_par_iter()
-            .map( |slice| {
-                // Collecting samples
-                let first_range  = slice * SLICE_OFFSET ..;
-                let second_range = .. slice * SLICE_OFFSET;
-
-                let mut samples: Samples = first[first_range].iter()
-                    .chain(second[second_range].iter())
-                    .cloned()
-                    .collect();
-
-                // Zero padding to the full frame length
-                samples.resize(NUM_POINTS, Cplx::default());
-
-                // Performing FFT
-                dft::transform(&mut samples, &plan);
-
-                samples
-            })
-            .collect();
+        let spectra: Vec<_> = build_spectra(&first, &second, &plan);
 
         // For each registered dictionary
         for (index, bound) in bounds.iter().enumerate() {
@@ -222,26 +226,7 @@ pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
         }
 
         // Collecting overlapping spectrums spanning the whole frame
-        let spectra: Vec<_> = (0 .. SLICES_PER_FRAME).into_par_iter()
-            .map( |slice| {
-                // Collecting samples
-                let first_range  = slice * SLICE_OFFSET ..;
-                let second_range = .. slice * SLICE_OFFSET;
-
-                let mut samples: Samples = first[first_range].iter()
-                    .chain(second[second_range].iter())
-                    .cloned()
-                    .collect();
-
-                // Zero padding to the full frame length
-                samples.resize(NUM_POINTS, Cplx::default());
-
-                // Performing FFT
-                dft::transform(&mut samples, &plan);
-
-                samples
-            })
-            .collect();
+        let spectra: Vec<_> = build_spectra(&first, &second, &plan);
 
         // For each registered dictionary
         dictionaries.par_iter_mut().enumerate().for_each( |(index, dictionary)| {
