@@ -205,6 +205,10 @@ impl FragmentKey {
         &self.0.bits()
     }
 
+    pub fn bits_set(&self) -> usize {
+        self.0.bits_set
+    }
+
     pub fn lower_bound(&self) -> Option<FragmentKey> {
         let mask = &self.0;
         let len  = mask.bits.len();

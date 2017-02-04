@@ -194,6 +194,13 @@ pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
                 let key = fragment.get_key(*bound, &detectors);
+
+                // Appending fragment key to result
+                if key.bits_set() != 0 {
+                    result.push(Some(key))
+                } else {
+                    result.push(None)
+                }
             }
         }
     }
