@@ -99,13 +99,19 @@ fn main() {
 //            serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
             to_writer(&mut glossary_file, &glossary).unwrap();
 
-            let key_filename = options.value_of("write-key").unwrap();
-            let keys = sound::analyze_file(input_filename, &glossary);
 
-            println!("Writing key");
-            let mut key_file = File::create(key_filename).unwrap();
-    //         serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
-            to_writer(&mut key_file, &keys).unwrap();
+            let keys = if let Some(key_filename) = options.value_of("write-key") {
+                let keys = sound::analyze_file(input_filename);
+
+                println!("Writing key");
+                let mut key_file = File::create(key_filename).unwrap();
+        //         serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
+                to_writer(&mut key_file, &keys).unwrap();
+
+                Some(keys)
+            } else {
+                None
+            };
 
             (glossary, keys)
         } else if let Some(glossary_filename) = options.value_of("use-glossary") {
@@ -125,7 +131,7 @@ fn main() {
 //             let keys: KeyVec = deserialize_from(&mut key_file, SizeLimit::Infinite).unwrap();
             let keys: KeyVec = from_reader(&mut key_file).unwrap();
 
-            (glossary, keys)
+            (glossary, Some(keys))
         } else {
             println!("Either build-glossary or use-glossary should be provided");
             return;
@@ -135,6 +141,6 @@ fn main() {
     if let Some(reconstruct_filename) = options.value_of("reconstruct") {
         println!("Reconstructing");
 
-        sound::reconstruct(reconstruct_filename, &glossary, &keys, similarity);
+        sound::reconstruct(reconstruct_filename, &glossary, &keys.unwrap(), similarity);
     }
 }
