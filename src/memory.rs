@@ -202,7 +202,7 @@ impl FragmentKey {
     }
 
     pub fn bits(&self) -> &BitVec {
-        &self.0.bits()
+        self.0.bits()
     }
 
     pub fn bits_set(&self) -> usize {
@@ -266,7 +266,7 @@ impl Fragment {
         let mut result = BitVec::new();
         let base_index = (fragment_range.0 / BASE_FREQUENCY).round() as usize;
 
-        for spectrum in self.spectra.iter() {
+        for spectrum in &self.spectra {
             // Iterating through all detectors filtering out activity
             for detector in detectors {
                 use sound::*;
@@ -506,7 +506,7 @@ impl Dictionary {
         prototype.merge_weight += value.merge_weight;
 
         // TODO Calculate during merge
-        prototype.get_key(freq_range, &detectors)
+        prototype.get_key(freq_range, detectors)
     }
 
     pub fn iter<'b>(&'b self) -> impl Iterator<Item=(&'b FragmentKey, &'b Box<Fragment>)> {

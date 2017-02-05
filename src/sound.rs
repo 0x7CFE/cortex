@@ -115,7 +115,7 @@ pub fn build_bounds() -> Vec<(f32, f32)> {
         .collect()
 }
 
-pub fn build_dictionaries(bounds: &Vec<(f32, f32)>) -> Vec<Dictionary> {
+pub fn build_dictionaries(bounds: &[(f32, f32)]) -> Vec<Dictionary> {
     bounds.iter()
         .map(|&(low, high)| Dictionary::new(low, high))
         .collect()
@@ -144,7 +144,7 @@ fn build_spectra(first_chunk: &Samples, second_chunk: &Samples, plan: &dft::Plan
         .collect()
 }
 
-pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
+pub fn analyze_file(filename: &str) -> KeyVec {
     println!("Generating keys for {}...", filename);
 
     // This will hold resulting bit vector of the detectors activity mask
@@ -163,7 +163,7 @@ pub fn analyze_file(filename: &str, glossary: &Glossary) -> KeyVec {
         .samples::<i16>()
         .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
         .collect_chunks::<Samples>(NUM_POINTS / 2)
-        .map(|chunk| Arc::new(chunk)) // Wrap into Rc for cheap cloning
+        .map(Arc::new) // Wrap each chunk into Arc for cheap cloning
         .tuple_windows()
     {
         if first.len() < NUM_POINTS / 2 || second.len() < NUM_POINTS / 2 {
@@ -225,7 +225,7 @@ pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
         .samples::<i16>()
         .map(|s| Cplx::new(s.unwrap() as f32 / i16::max_value() as f32, 0.0))
         .collect_chunks::<Samples>(NUM_POINTS / 2)
-        .map(|chunk| Arc::new(chunk)) // Wrap into Rc for cheap cloning
+        .map(Arc::new) // Wrap each chunk into Arc for cheap cloning
         .tuple_windows()
     {
         if first.len() < NUM_POINTS / 2 || second.len() < NUM_POINTS / 2 {
@@ -302,7 +302,7 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec, similarit
         output.resize(NUM_POINTS, Cplx::default());
 
         // Clearing from the previuos iteration
-        for spectrum in spectra.iter_mut() {
+        for spectrum in &mut spectra {
             spectrum.clear();
             spectrum.resize(NUM_POINTS, Cplx::default());
         }
@@ -319,9 +319,9 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec, similarit
                 let fragment_key = {
                     match key_iter.next() {
                         Some(option) => {
-                            match option {
-                                &Some(ref key) => key,
-                                &None => continue
+                            match *option {
+                                Some(ref key) => key,
+                                None => continue
                             }
                         },
 
