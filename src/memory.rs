@@ -311,7 +311,7 @@ impl Fragment {
                 let amp_match   = (compress(to_decibel(amplitude)).abs() - detector.amp.abs()).abs() < AMPLITUDE_DEVIATION_DB;
 
                 // + PI is required to compare positive and negative values
-                let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < PHASE_DEVIATION_DB;
+                let phase_match = ((phase + PI) - (detector.phase + PI)).abs() < detector.phase_range; //PHASE_DEVIATION_DB;
 
                 let is_active   = amp_match && phase_match;
                 result.push(is_active);

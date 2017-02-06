@@ -20,7 +20,6 @@ use memory::*;
 
 // TODO Move to the Detector as individual field
 pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;
-pub const PHASE_DEVIATION_DB: f32 = PI / 4.;
 
 pub type Cplx = ::num_complex::Complex<f32>;
 
@@ -47,6 +46,7 @@ pub struct Detector {
     pub band:  f32, // frequency range
     pub amp:   f32, // amplitude in dB
     pub phase: f32, // phase
+    pub phase_range: f32,
 }
 
 pub fn detector_freq(index: usize) -> f32 {
@@ -57,12 +57,13 @@ pub fn detector_freq(index: usize) -> f32 {
 }
 
 impl Detector {
-    pub fn new(freq: f32, band: f32, amp: f32, phase: f32) -> Detector {
+    pub fn new(freq: f32, band: f32, amp: f32, phase: f32, phase_range: f32) -> Detector {
         Detector {
             freq:  freq,
             band:  band,
             amp:   amp,
             phase: phase,
+            phase_range: phase_range,
         }
     }
 }
@@ -93,16 +94,27 @@ pub type KeyVec = Vec<Option<FragmentKey>>;
 pub fn build_detectors() -> Vec<Detector> {
     let mut detectors = Vec::new();
 
-    for i in 1 .. 141 {
+    for i in 10 .. 141 {
         let freq = detector_freq(i);
         let band = 2. * (detector_freq(i+1) - freq);
 
-        for &phase in &[ -PI, -PI/2., 0., PI/2., PI ]
+        let phase_count = match i {
+            _ if detector_freq(i) < 100.  => 30,
+            _ if detector_freq(i) < 300.  => 25,
+            _ if detector_freq(i) < 500.  => 20,
+            _ if detector_freq(i) < 1000. => 10,
+            _ if detector_freq(i) < 2000. => 8,
+            _ => 4,
+        };
+
+        let phase_range = 6. * PI / phase_count as f32;
+
+        for phase in (0 .. phase_count).map(|n| 2. * PI * n as f32 / phase_count as f32 - PI)
         {
-            detectors.push(Detector::new(freq, band, -5.,  phase));
-            detectors.push(Detector::new(freq, band, -15., phase));
-            detectors.push(Detector::new(freq, band, -25., phase));
-            detectors.push(Detector::new(freq, band, -35., phase));
+            detectors.push(Detector::new(freq, band, -5.,  phase, phase_range));
+            detectors.push(Detector::new(freq, band, -15., phase, phase_range));
+            detectors.push(Detector::new(freq, band, -25., phase, phase_range));
+            detectors.push(Detector::new(freq, band, -35., phase, phase_range));
         }
     }
 
