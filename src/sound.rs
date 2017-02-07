@@ -2,6 +2,9 @@
 use std::sync::Arc;
 use std::f32::consts::PI;
 use std::io::{Read};
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
+
 use dft;
 
 use hound;
@@ -91,12 +94,12 @@ const SLICES_PER_FRAGMENT: usize = SLICES_PER_FRAME / FRAGMENTS_PER_FRAME;
 
 pub type KeyVec = Vec<Option<FragmentKey>>;
 
-pub fn build_detectors() -> Vec<Detector> {
+pub fn build_detectors(range_coefficient: f32) -> Vec<Detector> {
     let mut detectors = Vec::new();
 
     for i in 10 .. 141 {
         let freq = detector_freq(i);
-        let band = 2. * (detector_freq(i+1) - freq);
+        let band = range_coefficient * 2. * (detector_freq(i + 1) - freq);
 
         let phase_count = match i {
             _ if detector_freq(i) < 100.  => 30,
@@ -107,10 +110,11 @@ pub fn build_detectors() -> Vec<Detector> {
             _ => 4,
         };
 
-        let phase_range = 6. * PI / phase_count as f32;
+        let phase_range = range_coefficient * 2. * PI / phase_count as f32;
 
         for phase in (0 .. phase_count).map(|n| 2. * PI * n as f32 / phase_count as f32 - PI)
         {
+            // TODO Apply range_coefficient to amplitude
             detectors.push(Detector::new(freq, band, -5.,  phase, phase_range));
             detectors.push(Detector::new(freq, band, -15., phase, phase_range));
             detectors.push(Detector::new(freq, band, -25., phase, phase_range));
@@ -162,14 +166,14 @@ pub fn analyze_file(filename: &str) -> KeyVec {
     // This will hold resulting bit vector of the detectors activity mask
     let mut result = KeyVec::new();
 
-    let detectors = build_detectors();
+    let detectors = build_detectors(1.5);
     let bounds = build_bounds();
 
     // Opening wave file for reading
     let mut reader = hound::WavReader::open(filename).unwrap();
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
 
-    let mut total_samples = 0;
+//     let mut total_samples = 0;
 
     for (first, second) in reader
         .samples::<i16>()
@@ -222,16 +226,25 @@ pub fn analyze_file(filename: &str) -> KeyVec {
     result
 }
 
+fn collect_garbage(dictionaries: &mut [Dictionary]) {
+    println!("Collecting garbage...");
+
+    dictionaries.par_iter_mut().enumerate().for_each( |(index, dictionary)| {
+        let (old_len, new_len) = dictionary.collect_garbage();
+        println!("dictionary {}, {} → {}", index, old_len, new_len);
+    });
+}
+
 pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
     println!("Building glossary from {} ... ", filename);
 
-    let detectors = build_detectors();
+    let detectors = build_detectors(1.);
     let mut dictionaries = build_dictionaries(&build_bounds());
 
     let plan = dft::Plan::new(dft::Operation::Forward, NUM_POINTS);
     let mut reader = hound::WavReader::open(filename).unwrap();
 
-    let mut frame_count = 0;
+    let mut frame_count = 1;
 
     for (first, second) in reader
         .samples::<i16>()
@@ -279,6 +292,29 @@ pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
     }
 
     println!("\nCompleted.");
+
+    let merge_stats: Vec<_> = dictionaries.par_iter()
+        .map(|dictionary| {
+            let mut stat = BTreeMap::new();
+
+            for fragment in dictionary.values() {
+                *stat.entry(fragment.weight()).or_insert(0) += 1;
+            }
+
+            stat
+        })
+        .collect();
+
+    for (index, stat) in merge_stats.iter().enumerate() {
+        println!("Merge statistics for dictionary {}", index);
+
+        for (weight, count) in stat {
+            println!("{} → {}", weight, count);
+        }
+
+        println!();
+    }
+
 
     Glossary::new(detectors, dictionaries)
 }

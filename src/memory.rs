@@ -262,6 +262,10 @@ impl Fragment {
         &self.spectra
     }
 
+    pub fn weight(&self) -> usize {
+        self.merge_weight
+    }
+
     pub fn get_key(&self, fragment_range: (f32, f32), detectors: &[Detector]) -> FragmentKey {
         let mut result = BitVec::new();
         let base_index = (fragment_range.0 / BASE_FREQUENCY).round() as usize;
@@ -373,6 +377,22 @@ impl Dictionary {
 
     pub fn get_fragment_key(&self, fragment: &Fragment, detectors: &[Detector]) -> FragmentKey {
         fragment.get_key(self.get_bounds(), detectors)
+    }
+
+    pub fn collect_garbage(&mut self) -> (usize, usize) {
+        let old_size = self.len();
+
+        let orphans: Vec<_> = self.map.iter()
+            .filter(|&(_, v)| v.merge_weight == 1)
+            .map(|(k, _)| k)
+            .cloned()
+            .collect();
+
+        for key in &orphans {
+            self.map.remove(key);
+        }
+
+        (old_size, self.len())
     }
 
     /// Insert a fragment into the dictionary. If dictionary already
@@ -511,6 +531,14 @@ impl Dictionary {
 
     pub fn iter<'b>(&'b self) -> impl Iterator<Item=(&'b FragmentKey, &'b Box<Fragment>)> {
         self.map.iter()
+    }
+
+    pub fn keys<'b>(&'b self) -> impl Iterator<Item=&'b FragmentKey> {
+        self.map.keys()
+    }
+
+    pub fn values<'b>(&'b self) -> impl Iterator<Item=&'b Box<Fragment>> {
+        self.map.values()
     }
 }
 
