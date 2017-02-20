@@ -141,6 +141,6 @@ fn main() {
     if let Some(reconstruct_filename) = options.value_of("reconstruct") {
         println!("Reconstructing");
 
-        sound::reconstruct(reconstruct_filename, &glossary, &keys.unwrap(), similarity);
+        sound::reconstruct(reconstruct_filename, &glossary, &keys.unwrap(), 5);
     }
 }

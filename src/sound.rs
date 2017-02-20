@@ -119,15 +119,46 @@ pub fn build_detectors(range_coefficient: f32) -> Vec<Detector> {
             detectors.push(Detector::new(freq, band, -15., phase, phase_range));
             detectors.push(Detector::new(freq, band, -25., phase, phase_range));
             detectors.push(Detector::new(freq, band, -35., phase, phase_range));
+
+//             println!("[{}] frequency: {}±{} phase {}±{}", i, freq, band, phase, phase_range);
         }
+
+        println!("[{}] frequency: {}±{}", i, freq, band);
     }
 
     detectors
 }
 
 pub fn build_bounds() -> Vec<(f32, f32)> {
-    (1 .. 14).into_iter()
-        .map(|i| (detector_freq(i*10), detector_freq((i+1)*10)) )
+    // [10] frequency: 64.59961±10.766602
+    // [11] frequency: 69.98291±10.766602
+    // [12] frequency: 75.36621±10.766602
+    // [13] frequency: 80.74951±10.766602
+    // [14] frequency: 86.13281±10.766602
+    // [15] frequency: 91.51611±10.766602
+    // [16] frequency: 96.899414±0
+    // [17] frequency: 96.899414±10.766602
+    // [18] frequency: 102.282715±10.766602
+    // [19] frequency: 107.666016±10.766602
+    // [20] frequency: 113.04932±10.766602
+    // [21] frequency: 118.43262±10.766602
+    // [22] frequency: 123.81592±10.766602
+    // [23] frequency: 129.19922±10.766602
+    // [24] frequency: 134.58252±10.766602
+    // [25] frequency: 139.96582±10.766602
+    // [26] frequency: 145.34912±10.766602
+    // [27] frequency: 150.73242±10.766602
+    // [28] frequency: 156.11572±10.766602
+    // [29] frequency: 161.49902±10.766602
+    // [30] frequency: 166.88232±10.766602
+
+    // 2 - 10-15  2*5 3*5
+    // 3 - 15-20  3*5 4*5
+    // 4 - 20-25  4*5 5*5
+
+    (2 .. 35).into_iter()
+        .tuple_windows() // (a, b), (b, c), ...
+        .map(|(i, j)| (detector_freq(i*4), detector_freq(j*4)) )
         .collect()
 }
 
@@ -166,7 +197,7 @@ pub fn analyze_file(filename: &str) -> KeyVec {
     // This will hold resulting bit vector of the detectors activity mask
     let mut result = KeyVec::new();
 
-    let detectors = build_detectors(1.5);
+    let detectors = build_detectors(1.);
     let bounds = build_bounds();
 
     // Opening wave file for reading
@@ -287,6 +318,11 @@ pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
             println!("frame {}, dictionary {}, fragments classified {}", frame_count, index, dictionary.len());
         });
 
+        // Collect garbage every N frames
+//         if frame_count % 1024 == 0 {
+//             collect_garbage(&mut dictionaries);
+//         }
+
         println!();
         frame_count += 1;
     }
@@ -315,6 +351,7 @@ pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
         println!();
     }
 
+//     collect_garbage(&mut dictionaries);
 
     Glossary::new(detectors, dictionaries)
 }
