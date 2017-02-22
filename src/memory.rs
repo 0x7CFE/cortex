@@ -660,7 +660,6 @@ mod fragment_key {
     #[test] fn lower_bound() {
         let data = &[
             // key            lower bound
-            ([0b_0000_0000], [0b_0000_0000]), // FIXME Unbounded?
             ([0b_0000_1111], [0b_0000_0000]),
             ([0b_1000_0001], [0b_0000_0000]),
             ([0b_1111_1111], [0b_0000_0000]),
@@ -677,12 +676,17 @@ mod fragment_key {
             ([0b_1000_0000], [0b_0111_1111]),
         ];
 
-         for &(key_bytes, bound_bytes) in data {
+        for &(key_bytes, bound_bytes) in data {
             let key      = FragmentKey::from_bitvec(BitVec::from_bytes(&key_bytes));
             let expected = FragmentKey::from_bitvec(BitVec::from_bytes(&bound_bytes));
-            let actual   = key.lower_bound();
+            let actual   = key.lower_bound().unwrap();
 
             assert_eq!(expected, actual, "test key: {:?}", key);
         }
+   }
+
+   #[test] fn unbounded() {
+        let key = FragmentKey::from_bitvec(BitVec::from_bytes(&[0b_0000_0000]));
+        assert_eq!(key.lower_bound(), None, "test key: {:?}", key);
    }
 }
