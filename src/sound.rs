@@ -1,9 +1,7 @@
 
 use std::sync::Arc;
 use std::f32::consts::PI;
-use std::io::{Read};
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
 
 use dft;
 
@@ -11,11 +9,10 @@ use hound;
 use sample::*;
 use sample::window::Type;
 
-use num_complex;
 use num_traits::Float;
 
 use itertools::Itertools;
-use iter::{CollectChunks, CollectChunksExt};
+use iter::CollectChunksExt;
 
 use rayon::prelude::*;
 

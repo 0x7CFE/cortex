@@ -10,8 +10,8 @@ extern crate clap;
 extern crate hound;
 extern crate sample;
 extern crate rayon;
+extern crate itertools;
 
-#[macro_use] extern crate itertools;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
 
@@ -30,12 +30,9 @@ mod sound;
 mod memory;
 mod iter;
 
-use sound::Detector;
-
 use sound::*;
 use memory::*;
 
-use std::f32::consts::PI;
 use std::fs::File;
 
 fn main() {

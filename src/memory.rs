@@ -1,13 +1,8 @@
 
-use std::collections::HashMap;
-
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
-use std::collections::Bound::{self, Included, Excluded, Unbounded};
+use std::collections::Bound::{Included, Excluded, Unbounded};
 
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::cmp::{Ord, Ordering, max};
+use std::cmp::{Ord, Ordering};
 use std::f32::consts::PI;
 
 use std::fmt::{self, Debug, Formatter};
@@ -15,7 +10,6 @@ use std::fmt::{self, Debug, Formatter};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::de::{Visitor, Error};
 
-use sound; // {Spectrum, Cplx, Detector};
 use sound::*;
 
 // We need to implement serde for a foreign type
