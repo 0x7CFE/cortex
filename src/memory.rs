@@ -187,6 +187,14 @@ impl Ord for SparseBitVec {
     }
 }
 
+impl Deref for SparseBitVec {
+    type Target = BitVec;
+
+    fn deref(&self) -> &Self::Target {
+        &self.bits
+    }
+}
+
 /// Sparse bit vector acting as a key of a fragment.
 /// Type is used to differ fragment keys from other vectors.
 #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
