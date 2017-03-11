@@ -298,12 +298,11 @@ impl Fragment {
 
                 // Selecting the entry with the largest amplitude
                 // TODO vary sensitivity depending on the frequency deviation
-                let (index, amplitude, phase) = range
+                let (amplitude, phase) = range
                     .iter()
-                    .enumerate()
-                    .map(|(i, c)| (i, (c.norm() * 2.0) / NUM_POINTS as f32, c.arg()))
-                    .max_by(|&(_, x, _), &(_, y, _)| float_cmp(x, y, 0.00001))
-                    .unwrap_or((0, 0., 0.));
+                    .map(|c| ((c.norm() * 2.0) / NUM_POINTS as f32, c.arg()))
+                    .max_by(|&(x, _), &(y, _)| float_cmp(x, y, 0.00001))
+                    .unwrap_or((0., 0.));
 
                 let compress = |a| {
                     if a > -50. && a < -15. {

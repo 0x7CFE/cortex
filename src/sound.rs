@@ -218,7 +218,7 @@ pub fn analyze_file(filename: &str) -> KeyVec {
         let spectra: Vec<_> = build_spectra(&first, &second, &plan);
 
         // For each registered dictionary
-        for (index, bound) in bounds.iter().enumerate() {
+        for bound in &bounds {
             // Each dictionary operates only in the fixed part of the spectrum
             // Selecting potentially interesting spectrum slice to check
             let low  = (bound.0 / BASE_FREQUENCY).round() as usize;
@@ -309,7 +309,7 @@ pub fn build_glossary(filename: &str, similarity: usize) -> Glossary {
                 }
 
                 let fragment = Fragment::from_spectra(fragment_spectra);
-                let key = dictionary.insert_fragment(fragment, &detectors, similarity);
+                let _key = dictionary.insert_fragment(fragment, &detectors, similarity);
             }
 
             println!("frame {}, dictionary {}, fragments classified {}", frame_count, index, dictionary.len());
@@ -390,12 +390,12 @@ pub fn reconstruct(filename: &str, glossary: &Glossary, keys: &KeyVec, similarit
         }
 
         // For each registered dictionary
-        for (index, dictionary) in glossary.iter().enumerate() {
+        for (_index, dictionary) in glossary.iter().enumerate() {
             // Each dictionary operates only in the fixed part of the spectrum
             // Selecting potentially interesting spectrum slice to check
             let frequencies = dictionary.get_bounds();
             let low  = (frequencies.0 / BASE_FREQUENCY).round() as usize;
-            let high = (frequencies.1 / BASE_FREQUENCY).round() as usize;
+            // let high = (frequencies.1 / BASE_FREQUENCY).round() as usize;
 
             for fragment_index in 0 .. FRAGMENTS_PER_FRAME {
                 let fragment_key = {
@@ -472,9 +472,9 @@ pub fn dump_dictionary(filename: &str, dictionary: &Dictionary) {
 
     let freqs = dictionary.get_bounds(); //FRAGMENT_WINDOW;
     let low  = (freqs.0 / BASE_FREQUENCY).round() as usize;
-    let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
+    // let high = (freqs.1 / BASE_FREQUENCY).round() as usize;
 
-    for (key, fragment) in dictionary.iter() {
+    for (_key, fragment) in dictionary.iter() {
 //         println!("writing key {:?}\n", key);
 
         // Accumulated output mixed from all time slices
