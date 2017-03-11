@@ -1,6 +1,7 @@
 
 #![feature(btree_range, collections_bound)]
 #![feature(conservative_impl_trait)]
+#![allow(dead_code)]
 
 extern crate num_traits;
 extern crate num_complex;
@@ -16,13 +17,13 @@ extern crate itertools;
 extern crate serde;
 
 // extern crate serde_json;
-// extern crate bincode;
-// use bincode::SizeLimit;
-// use bincode::serde::{serialize_into, deserialize_from};
+extern crate bincode;
+use bincode::SizeLimit;
+use bincode::serde::{serialize_into, deserialize_from};
 
-extern crate serde_cbor;
-use serde_cbor::ser::to_writer;
-use serde_cbor::de::from_reader;
+// extern crate serde_cbor;
+// use serde_cbor::ser::to_writer;
+// use serde_cbor::de::from_reader;
 
 use clap::{Arg, App};
 
@@ -93,8 +94,8 @@ fn main() {
 
             println!("Writing glossary file");
             let mut glossary_file = File::create(glossary_filename).unwrap();
-//            serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
-            to_writer(&mut glossary_file, &glossary).unwrap();
+            serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
+            // to_writer(&mut glossary_file, &glossary).unwrap();
 
 
             let keys = if let Some(key_filename) = options.value_of("write-key") {
@@ -102,8 +103,8 @@ fn main() {
 
                 println!("Writing key");
                 let mut key_file = File::create(key_filename).unwrap();
-        //         serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
-                to_writer(&mut key_file, &keys).unwrap();
+                serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
+                // to_writer(&mut key_file, &keys).unwrap();
 
                 Some(keys)
             } else {
@@ -120,13 +121,13 @@ fn main() {
 
             println!("Reading glossary");
             let mut glossary_file = File::open(glossary_filename).unwrap();
-//             let glossary: Glossary = deserialize_from(&mut glossary_file, SizeLimit::Infinite).unwrap();
-            let glossary: Glossary = from_reader(glossary_file).unwrap();
+            let glossary: Glossary = deserialize_from(&mut glossary_file, SizeLimit::Infinite).unwrap();
+            // let glossary: Glossary = from_reader(glossary_file).unwrap();
 
             println!("Reading key");
             let mut key_file = File::open(key_filename.unwrap()).unwrap();
-//             let keys: KeyVec = deserialize_from(&mut key_file, SizeLimit::Infinite).unwrap();
-            let keys: KeyVec = from_reader(&mut key_file).unwrap();
+            let keys: KeyVec = deserialize_from(&mut key_file, SizeLimit::Infinite).unwrap();
+            // let keys: KeyVec = from_reader(&mut key_file).unwrap();
 
             (glossary, Some(keys))
         } else {
