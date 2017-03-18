@@ -8,74 +8,76 @@ use std::f32::consts::PI;
 use std::fmt::{self, Debug, Formatter};
 
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use serde::de::{Visitor, Error};
-
+use serde::de::{Visitor, SeqVisitor, VariantVisitor, DeserializeSeed, Error};
+use serde::ser::SerializeSeq;
 use sound::*;
 
+use bit_vec::BitVec;
+
 // We need to implement serde for a foreign type
-#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct BitVec(::bit_vec::BitVec);
+// #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
+// pub struct BitVec(::bit_vec::BitVec);
 use std::ops::{Deref, DerefMut};
 
-impl BitVec {
-    pub fn new() -> Self {
-        BitVec(::bit_vec::BitVec::new())
-    }
+// impl BitVec {
+//     pub fn new() -> Self {
+//         BitVec(::bit_vec::BitVec::new())
+//     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        BitVec(::bit_vec::BitVec::from_bytes(bytes))
-    }
+//     pub fn from_bytes(bytes: &[u8]) -> Self {
+//         BitVec(::bit_vec::BitVec::from_bytes(bytes))
+//     }
 
-    pub fn from_fn<F>(len: usize, f: F) -> Self
-        where F: FnMut(usize) -> bool
-    {
-        BitVec(::bit_vec::BitVec::from_fn(len, f))
-    }
-}
+//     pub fn from_fn<F>(len: usize, f: F) -> Self
+//         where F: FnMut(usize) -> bool
+//     {
+//         BitVec(::bit_vec::BitVec::from_fn(len, f))
+//     }
+// }
 
-impl Deref for BitVec {
-    type Target = ::bit_vec::BitVec;
+// impl Deref for BitVec {
+//     type Target = ::bit_vec::BitVec;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 
-impl DerefMut for BitVec {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+// impl DerefMut for BitVec {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
 
-impl Serialize for BitVec {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-        where S: Serializer
-    {
-        let bytes = self.to_bytes();
-        serializer.serialize_bytes(&bytes)
-    }
-}
+// impl Serialize for BitVec {
+//     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+//         where S: Serializer
+//     {
+//         let bytes = self.to_bytes();
+//         serializer.serialize_bytes(&bytes)
+//     }
+// }
 
-impl Deserialize for BitVec {
-    fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
-        where D: Deserializer
-    {
-        struct BitVecVisitor;
+// impl Deserialize for BitVec {
+//     fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+//         where D: Deserializer
+//     {
+//         struct BitVecVisitor;
 
-        impl Visitor for BitVecVisitor {
-            type Value = BitVec;
+//         impl Visitor for BitVecVisitor {
+//             type Value = BitVec;
 
-            #[inline]
-            fn visit_bytes<E>(&mut self, v: &[u8]) -> Result<Self::Value, E>
-                where E: Error
-            {
-                Ok(BitVec::from_bytes(v))
-            }
-        }
+//             #[inline]
+//             fn visit_bytes<E>(&mut self, v: &[u8]) -> Result<Self::Value, E>
+//                 where E: Error
+//             {
+//                 Ok(BitVec::from_bytes(v))
+//             }
+//         }
 
-        deserializer.deserialize_bytes(BitVecVisitor)
-    }
-}
+//         deserializer.deserialize_bytes(BitVecVisitor)
+//     }
+// }
 
 
 /// Special wrapper over `BitVec` that optimizes the case when
@@ -85,7 +87,52 @@ pub struct SparseBitVec {
     leading_zeros: usize,
     trailing_zeros: usize,
     bits_set: usize,
+
+    #[serde(serialize_with = "serialize_bits", deserialize_with = "deserialize_bits")]
     bits: BitVec,
+}
+
+fn serialize_bits<S>(bits: &BitVec, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer
+{
+    let bytes = bits.to_bytes();
+    serializer.serialize_bytes(&bytes)
+}
+
+fn deserialize_bits<D>(deserializer: D) -> Result<BitVec, D::Error>
+    where D: Deserializer
+{
+    struct BitVecVisitor;
+
+    impl Visitor for BitVecVisitor {
+        type Value = BitVec;
+
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("byte array")
+        }
+
+        fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
+            where V: SeqVisitor
+        {
+            let len = visitor.size_hint().0;
+            let mut bytes = Vec::with_capacity(len);
+            while let Some(value) = visitor.visit()? {
+                bytes.push(value);
+            }
+        
+            Ok(BitVec::from_bytes(&bytes))
+        }
+
+        #[inline]
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where E: Error
+        {
+            Ok(BitVec::from_bytes(v))
+        }
+    }
+
+    deserializer.deserialize_bytes(BitVecVisitor)
 }
 
 impl Debug for SparseBitVec {
@@ -228,6 +275,7 @@ impl FragmentKey {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Fragment {
     /// Slice of DFT within Dictionary's range.
+    #[serde(serialize_with="serialize_spectra", deserialize_with="deserialize_spectra")]
     spectra: Vec<Spectrum>,
 
     /// Weight of fragment as prototype.
@@ -235,6 +283,54 @@ pub struct Fragment {
     merge_weight: usize,
 
     // TODO use_count: Cell<usize>,
+}
+
+fn serialize_spectra<S>(spectra: &[Spectrum], serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer
+{
+    struct SpectrumSerializer<'a>(&'a Spectrum);
+
+    impl<'a> Serialize for SpectrumSerializer<'a> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where S: Serializer
+        {
+            serializer.collect_seq(self.0.iter().map(|value| (value.re, value.im)))
+        }
+    }
+
+    serializer.collect_seq(spectra.iter().map(SpectrumSerializer))
+}
+
+fn deserialize_spectra<D>(deserializer: D) -> Result<Vec<Spectrum>, D::Error>
+    where D: Deserializer
+{
+    struct SpectrumVisitor;
+    struct SpectrumDeserializer<'a>(&'a Spectrum);
+    struct CplxVisitor;
+
+    impl Visitor for SpectrumVisitor {
+        type Value = Vec<Spectrum>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("spectrum array")
+        }
+
+        fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
+            where V: SeqVisitor
+        {
+            let len = visitor.size_hint().0;
+            let mut spectra = Vec::with_capacity(len);
+
+            while let Some(spectrum) = visitor.visit::<Vec<(f32, f32)>>()? {
+                let value = spectrum.iter().map(|&(re, im)| Cplx::new(re, im)).collect();
+                spectra.push(value);
+            }
+        
+            Ok(spectra)
+        }
+    }
+
+    deserializer.deserialize_seq(SpectrumVisitor)
 }
 
 impl Fragment {

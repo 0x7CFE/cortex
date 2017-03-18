@@ -17,6 +17,7 @@ use iter::CollectChunksExt;
 use rayon::prelude::*;
 
 use memory::*;
+use bit_vec::BitVec;
 
 // TODO Move to the Detector as individual field
 pub const AMPLITUDE_DEVIATION_DB: f32 = 5.;

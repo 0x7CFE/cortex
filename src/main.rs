@@ -19,7 +19,7 @@ extern crate serde;
 // extern crate serde_json;
 extern crate bincode;
 use bincode::SizeLimit;
-use bincode::serde::{serialize_into, deserialize_from};
+use bincode::{serialize_into, deserialize_from};
 
 // extern crate serde_cbor;
 // use serde_cbor::ser::to_writer;
@@ -94,7 +94,7 @@ fn main() {
 
             println!("Writing glossary file");
             let mut glossary_file = File::create(glossary_filename).unwrap();
-            serialize_into(&mut glossary_file, &glossary, SizeLimit::Infinite).unwrap();
+            serialize_into(&mut glossary_file, &glossary, bincode::Infinite).unwrap();
             // to_writer(&mut glossary_file, &glossary).unwrap();
 
 
@@ -103,7 +103,7 @@ fn main() {
 
                 println!("Writing key");
                 let mut key_file = File::create(key_filename).unwrap();
-                serialize_into(&mut key_file, &keys, SizeLimit::Infinite).unwrap();
+                serialize_into(&mut key_file, &keys, bincode::Infinite).unwrap();
                 // to_writer(&mut key_file, &keys).unwrap();
 
                 Some(keys)
@@ -121,12 +121,12 @@ fn main() {
 
             println!("Reading glossary");
             let mut glossary_file = File::open(glossary_filename).unwrap();
-            let glossary: Glossary = deserialize_from(&mut glossary_file, SizeLimit::Infinite).unwrap();
+            let glossary: Glossary = deserialize_from(&mut glossary_file, bincode::Infinite).unwrap();
             // let glossary: Glossary = from_reader(glossary_file).unwrap();
 
             println!("Reading key");
             let mut key_file = File::open(key_filename.unwrap()).unwrap();
-            let keys: KeyVec = deserialize_from(&mut key_file, SizeLimit::Infinite).unwrap();
+            let keys: KeyVec = deserialize_from(&mut key_file, bincode::Infinite).unwrap();
             // let keys: KeyVec = from_reader(&mut key_file).unwrap();
 
             (glossary, Some(keys))

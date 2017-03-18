@@ -6,17 +6,17 @@ authors = ["Dmitry Kashitsyn <korvin@deeptown.org>"]
 [dependencies]
 dft = "0.5.3"
 bit-vec = "0.4.3"
-num-traits = "0.1.36"
+num-traits = "0.1"
 clap = "2.19.3"
 hound = "3.0.0"
 itertools = "0.5.8"
 sample = "0.6.2"
-serde = "0.8"
-serde_derive = "0.8"
-bincode = "0.6"
+serde = "0.9"
+serde_derive = "0.9"
+bincode = "1.0.0-alpha5"
 serde_cbor = "0.4"
 rayon = "0.6"
 
 [dependencies.num-complex]
-version = "0.1.35"
-features = ["serde"]
+version = "0.1.36"
+#features = ["serde"]
