@@ -16,14 +16,8 @@ extern crate itertools;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
 
-// extern crate serde_json;
 extern crate bincode;
-use bincode::SizeLimit;
 use bincode::{serialize_into, deserialize_from};
-
-// extern crate serde_cbor;
-// use serde_cbor::ser::to_writer;
-// use serde_cbor::de::from_reader;
 
 use clap::{Arg, App};
 

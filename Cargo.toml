@@ -14,7 +14,6 @@ sample = "0.6.2"
 serde = "0.9"
 serde_derive = "0.9"
 bincode = "1.0.0-alpha5"
-serde_cbor = "0.4"
 rayon = "0.6"
 
 [dependencies.num-complex]

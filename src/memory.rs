@@ -6,79 +6,13 @@ use std::cmp::{Ord, Ordering};
 use std::f32::consts::PI;
 
 use std::fmt::{self, Debug, Formatter};
+use std::ops::Deref;
 
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use serde::de::{Visitor, SeqVisitor, VariantVisitor, DeserializeSeed, Error};
-use serde::ser::SerializeSeq;
+use serde::{Serialize, Serializer, Deserializer};
+use serde::de::{Visitor, SeqVisitor, Error};
 use sound::*;
 
 use bit_vec::BitVec;
-
-// We need to implement serde for a foreign type
-// #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
-// pub struct BitVec(::bit_vec::BitVec);
-use std::ops::{Deref, DerefMut};
-
-// impl BitVec {
-//     pub fn new() -> Self {
-//         BitVec(::bit_vec::BitVec::new())
-//     }
-
-//     pub fn from_bytes(bytes: &[u8]) -> Self {
-//         BitVec(::bit_vec::BitVec::from_bytes(bytes))
-//     }
-
-//     pub fn from_fn<F>(len: usize, f: F) -> Self
-//         where F: FnMut(usize) -> bool
-//     {
-//         BitVec(::bit_vec::BitVec::from_fn(len, f))
-//     }
-// }
-
-// impl Deref for BitVec {
-//     type Target = ::bit_vec::BitVec;
-
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
-// impl DerefMut for BitVec {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.0
-//     }
-// }
-
-// impl Serialize for BitVec {
-//     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-//         where S: Serializer
-//     {
-//         let bytes = self.to_bytes();
-//         serializer.serialize_bytes(&bytes)
-//     }
-// }
-
-// impl Deserialize for BitVec {
-//     fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
-//         where D: Deserializer
-//     {
-//         struct BitVecVisitor;
-
-//         impl Visitor for BitVecVisitor {
-//             type Value = BitVec;
-
-//             #[inline]
-//             fn visit_bytes<E>(&mut self, v: &[u8]) -> Result<Self::Value, E>
-//                 where E: Error
-//             {
-//                 Ok(BitVec::from_bytes(v))
-//             }
-//         }
-
-//         deserializer.deserialize_bytes(BitVecVisitor)
-//     }
-// }
-
 
 /// Special wrapper over `BitVec` that optimizes the case when
 /// bit vector contains relatively small amount of set bits.
@@ -305,8 +239,6 @@ fn deserialize_spectra<D>(deserializer: D) -> Result<Vec<Spectrum>, D::Error>
     where D: Deserializer
 {
     struct SpectrumVisitor;
-    struct SpectrumDeserializer<'a>(&'a Spectrum);
-    struct CplxVisitor;
 
     impl Visitor for SpectrumVisitor {
         type Value = Vec<Spectrum>;
