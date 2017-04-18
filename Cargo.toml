@@ -14,7 +14,7 @@ sample = "0.6.2"
 serde = "0.9"
 serde_derive = "0.9"
 bincode = "1.0.0-alpha5"
-rayon = "0.6"
+rayon = "0.7"
 
 [dependencies.num-complex]
 version = "0.1.36"
